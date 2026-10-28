@@ -49,7 +49,7 @@
   }
 
   // Masque "encre" par seuillage local (moyenne sur une fenêtre, via image intégrale).
-  function inkMask(canvas) {
+  function inkMask(canvas, radius) {
     const w = canvas.width, h = canvas.height;
     const px = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
     const gray = new Float32Array(w * h);
@@ -64,7 +64,7 @@
         integral[y * W + x] = integral[(y - 1) * W + x] + row;
       }
     }
-    const r = Math.max(8, Math.round(Math.max(w, h) / 40));
+    const r = radius || Math.max(8, Math.round(Math.max(w, h) / 40));
     const ink = new Uint8Array(w * h);
     for (let y = 0; y < h; y++) {
       const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
@@ -78,7 +78,8 @@
   }
 
   // Taches d'encre connexes ayant une forme de caractère, regroupées en numéros.
-  function findNumbers(ink, w, h) {
+  // maxCharH : hauteur max d'un caractère (fraction de l'image) — plus grand pour un cadrage serré
+  function findNumbers(ink, w, h, maxCharH) {
     const label = new Int32Array(w * h);
     const comps = [];
     const stack = [];
@@ -104,7 +105,7 @@
 
     const chars = comps.filter((c) => {
       const ratio = c.w / c.h, fill = c.n / (c.w * c.h);
-      return c.h > h * 0.012 && c.h < h * 0.4 && ratio > 0.12 && ratio < 1.6 && fill > 0.12 && fill < 0.9;
+      return c.h > h * 0.012 && c.h < h * maxCharH && ratio > 0.12 && ratio < 1.6 && fill > 0.12 && fill < 0.9;
     }).sort((a, b) => a.x - b.x);
 
     // Deux caractères voisins, de même taille et sur la même ligne = même numéro
@@ -161,7 +162,8 @@
   }
 
   // Renvoie [{x, y, w, h (fractions de l'image), raw, code|null}]
-  async function read(prepared, codeList, onProgress = () => {}) {
+  // opts : { radius, maxCharH } pour les cadrages serrés (viseur de la caméra)
+  async function read(prepared, codeList, onProgress = () => {}, opts = {}) {
     const codes = new Set(codeList.map(normalize).filter(Boolean));
     const chars = new Set('0123456789');
     codes.forEach((c) => [...c].forEach((ch) => chars.add(ch)));
@@ -175,8 +177,8 @@
     onProgress(0.25, 'Repérage des numéros');
     await new Promise((r) => setTimeout(r, 0)); // laisse l'interface se mettre à jour
     const { w, h } = prepared;
-    const ink = inkMask(prepared.canvas);
-    const boxes = findNumbers(ink, w, h);
+    const ink = inkMask(prepared.canvas, opts.radius);
+    const boxes = findNumbers(ink, w, h, opts.maxCharH || 0.4);
 
     const found = [];
     for (let i = 0; i < boxes.length; i++) {

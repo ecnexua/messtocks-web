@@ -23,26 +23,29 @@ function demoData() {
   const art = (id, nom, reference, idCategorie, idSousCategorie, idMarque, stocks, stocksMini) =>
     ({ id, nom, reference, idCategorie, idSousCategorie, idMarque, stocks, stocksMini, profondeur: 1 });
   return {
-    categories: [{ id: 'c1', nom: 'Câblage' }, { id: 'c2', nom: 'Protection' }, { id: 'c3', nom: 'Appareillage' }, { id: 'c4', nom: 'Éclairage' }],
+    categories: [{ id: 'c1', nom: 'Épicerie sèche' }, { id: 'c2', nom: 'Conserves' }, { id: 'c3', nom: 'Boissons' }, { id: 'c4', nom: 'Condiments' }],
     sousCategories: [
-      { id: 's1', nom: 'Câbles R2V', idCategorie: 'c1' }, { id: 's2', nom: 'Gaines ICTA', idCategorie: 'c1' },
-      { id: 's3', nom: 'Disjoncteurs', idCategorie: 'c2' }, { id: 's4', nom: 'Interrupteurs diff.', idCategorie: 'c2' },
-      { id: 's5', nom: 'Prises', idCategorie: 'c3' }, { id: 's6', nom: 'Interrupteurs', idCategorie: 'c3' },
-      { id: 's7', nom: 'Spots LED', idCategorie: 'c4' },
+      { id: 's1', nom: 'Pâtes', idCategorie: 'c1' }, { id: 's2', nom: 'Riz & céréales', idCategorie: 'c1' },
+      { id: 's3', nom: 'Légumes', idCategorie: 'c2' }, { id: 's4', nom: 'Tomates', idCategorie: 'c2' },
+      { id: 's5', nom: 'Eaux', idCategorie: 'c3' }, { id: 's6', nom: 'Jus', idCategorie: 'c3' },
+      { id: 's7', nom: 'Huiles', idCategorie: 'c4' }, { id: 's8', nom: 'Sauces', idCategorie: 'c4' },
     ],
-    marques: [{ id: 'm1', nom: 'Legrand' }, { id: 'm2', nom: 'Schneider' }, { id: 'm3', nom: 'Hager' }, { id: 'm4', nom: 'Nexans' }],
+    marques: [
+      { id: 'm1', nom: 'Barilla' }, { id: 'm2', nom: 'Taureau Ailé' }, { id: 'm3', nom: 'Bonduelle' }, { id: 'm4', nom: 'Mutti' },
+      { id: 'm5', nom: 'Cristaline' }, { id: 'm6', nom: 'Joker' }, { id: 'm7', nom: 'Lesieur' }, { id: 'm8', nom: 'Heinz' },
+    ],
     utilisateurs: [{ id: 'u1', nom: 'Karim' }, { id: 'u2', nom: 'Julie' }, { id: 'u3', nom: 'Thomas' }],
     articles: [
-      art('a1', 'Câble R2V 3G2,5 — 50 m', '12', 'c1', 's1', 'm4', 8, 4),
-      art('a2', 'Câble R2V 3G1,5 — 100 m', '14', 'c1', 's1', 'm4', 3, 4),
-      art('a3', 'Gaine ICTA Ø20 — 100 m', '21', 'c1', 's2', 'm4', 12, 5),
-      art('a4', 'Disjoncteur 16 A', '23', 'c2', 's3', 'm3', 24, 10),
-      art('a5', 'Disjoncteur 20 A', '24', 'c2', 's3', 'm3', 6, 10),
-      art('a6', 'Interrupteur diff. 40 A 30 mA', '31', 'c2', 's4', 'm2', 5, 3),
-      art('a7', 'Prise 2P+T Mosaic', '35', 'c3', 's5', 'm1', 40, 20),
-      art('a8', 'Va-et-vient Céliane', '42', 'c3', 's6', 'm1', 18, 10),
-      art('a9', 'Spot LED encastré 6 W', '45', 'c4', 's7', 'm1', 2, 8),
-      art('a10', 'Boîte d’encastrement Ø67', '52', 'c3', 's5', 'm1', 60, 30),
+      art('a1', 'Spaghetti n°5 — 12 × 1 kg', '12', 'c1', 's1', 'm1', 8, 4),
+      art('a2', 'Penne rigate — 12 × 1 kg', '14', 'c1', 's1', 'm1', 3, 4),
+      art('a3', 'Riz long grain — 10 × 1 kg', '21', 'c1', 's2', 'm2', 12, 5),
+      art('a4', 'Haricots verts extra-fins — 6 × 4/4', '23', 'c2', 's3', 'm3', 24, 10),
+      art('a5', 'Maïs doux — 6 × 4/4', '24', 'c2', 's3', 'm3', 6, 10),
+      art('a6', 'Tomates concassées — 6 × 5/1', '31', 'c2', 's4', 'm4', 5, 3),
+      art('a7', 'Eau de source 50 cl — 24 bout.', '35', 'c3', 's5', 'm5', 40, 20),
+      art('a8', 'Jus d’orange 1 L — 6 brik', '42', 'c3', 's6', 'm6', 18, 10),
+      art('a9', 'Huile de tournesol 5 L — 3 bidons', '45', 'c4', 's7', 'm7', 2, 8),
+      art('a10', 'Ketchup 875 ml — 6 flacons', '52', 'c4', 's8', 'm8', 60, 30),
     ],
     historique: [
       { id: 'h1', idArticle: 'a9', type: 'S', quantite: 6, idUtilisateur: 'u1', date: ago(3), source: 'scan' },
@@ -65,7 +68,12 @@ function emptyData() {
 function load() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) return { ...emptyData(), ...JSON.parse(raw) };
+    if (raw) {
+      const data = JSON.parse(raw);
+      // Ancienne démo (matériel électrique) jamais modifiée → remplacée par la démo alimentaire
+      if (data.articles?.[0]?.nom === 'Câble R2V 3G2,5 — 50 m' && data.categories?.[0]?.nom === 'Câblage') return demoData();
+      return { ...emptyData(), ...data };
+    }
   } catch (e) { /* stockage indisponible */ }
   return demoData();
 }
@@ -78,7 +86,7 @@ function persist() {
 }
 
 // Objets journalisés, comme "derniersEvenements" dans la version Firestore
-const OBJETS = { A: 'Article', C: 'Catégorie', SC: 'Sous-catégorie', M: 'Marque', U: 'Utilisateur', I: 'Inventaire', D: 'Données' };
+const OBJETS = { A: 'Produit', C: 'Catégorie', SC: 'Sous-catégorie', M: 'Marque', U: 'Utilisateur', I: 'Inventaire', D: 'Données' };
 const TYPES_EVT = { A: 'Créé', M: 'Modifié', S: 'Supprimé' };
 
 function logEvent(objet, nomObjet, type) {
@@ -142,7 +150,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme
 
 function render() {
   document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', !ui.page && b.dataset.tab === ui.tab));
-  const views = { recap: viewRecap, recherche: viewRecherche, scan: viewScan, ajouter: viewAjouter, params: viewParams };
+  const views = { recap: viewRecap, recherche: viewRecherche, scan: viewScan, produits: viewProduits, params: viewParams };
   const pages = { historique: viewHistorique, evenements: viewEvenements };
   $('view').innerHTML = ui.page ? pages[ui.page]() : views[ui.tab]();
 }
@@ -160,7 +168,7 @@ function movementRow(h) {
   const src = h.source === 'inventaire' ? 'Inventaire' : h.source === 'manuel' ? 'Correction' : '';
   return `<li ${a ? `data-act="open-article" data-id="${a.id}"` : ''}>
     <span class="tag ${h.type}">${sign}${h.quantite}</span>
-    <span class="grow"><b>${esc(a?.nom || 'Article supprimé')}</b>
+    <span class="grow"><b>${esc(a?.nom || 'Produit supprimé')}</b>
       <small>${[a?.reference ? 'N° ' + a.reference : '', who, src, fmtDate(h.date)].filter(Boolean).map(esc).join(' · ')}</small></span>
   </li>`;
 }
@@ -192,7 +200,7 @@ function viewRecap() {
   return `
     <div class="page-title">RÉCAP'<small>${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</small></div>
     <div class="kpis">
-      ${kpi('Articles', db.articles.length, { act: 'tab', data: ' data-tab="recherche"' })}
+      ${kpi('Produits', db.articles.length, { act: 'tab', data: ' data-tab="recherche"' })}
       ${kpi('À commander', low.length, { alert: low.length > 0, act: 'search-low' })}
       ${kpi('Unités en stock', totalUnits)}
       ${kpi('Mouvements 7 j', mvts, { act: 'page', data: ' data-page="historique"' })}
@@ -202,7 +210,7 @@ function viewRecap() {
         <h2><i>A</i> Sous-catégories <span class="count">${sousRows.length}</span></h2>
         <ul class="list">${sousRows.map(({ sc, total, n }) => `
           <li data-act="search-sous" data-id="${sc.id}">
-            <span class="grow"><b>${esc(sc.nom)}</b><small>${esc(nomOf(db.categories, sc.idCategorie))} · ${total} article${total > 1 ? 's' : ''}</small></span>
+            <span class="grow"><b>${esc(sc.nom)}</b><small>${esc(nomOf(db.categories, sc.idCategorie))} · ${total} produit${total > 1 ? 's' : ''}</small></span>
             ${n ? `<span class="pill accent">${n} à commander</span>` : '<span class="pill">À jour</span>'}
           </li>`).join('') || '<li class="empty">Aucune sous-catégorie</li>'}
         </ul>
@@ -237,7 +245,7 @@ function filteredArticles() {
 function resultsHtml() {
   const list = filteredArticles();
   return `<h2><i>R</i> Résultats <span class="count">${list.length}</span></h2>
-    <ul class="list">${list.map(articleRow).join('') || '<li class="empty">Aucun article</li>'}</ul>`;
+    <ul class="list">${list.map(articleRow).join('') || '<li class="empty">Aucun produit</li>'}</ul>`;
 }
 
 const options = (list, selected, placeholder) =>
@@ -257,14 +265,14 @@ function viewRecherche() {
     </div>
     <div class="seg full" style="margin-bottom:6px">${seg.map(([k, l]) => `<button data-act="search-type" data-v="${k}" class="${s.type === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <section class="card" id="results">${resultsHtml()}</section>
-    <button class="btn big primary" data-act="new-article">+ Nouvel article</button>`;
+    <button class="btn big primary" data-act="new-article">+ Nouveau produit</button>`;
 }
 
 // ---- 03 Scan
 
 function viewScan() {
   return `
-    <div class="page-title">SCAN<small>${ui.scanMode === 'mouvement' ? 'Entrée ou sortie d’un article' : 'Compter une étagère en photo'}</small></div>
+    <div class="page-title">SCAN<small>${ui.scanMode === 'mouvement' ? 'Entrée ou sortie d’un produit' : 'Compter une étagère en photo'}</small></div>
     <div class="seg full" style="margin-bottom:6px">
       <button data-act="scan-mode" data-v="mouvement" class="${ui.scanMode === 'mouvement' ? 'on' : ''}">Mouvement</button>
       <button data-act="scan-mode" data-v="inventaire" class="${ui.scanMode === 'inventaire' ? 'on' : ''}">Inventaire étagère</button>
@@ -286,7 +294,7 @@ function scanMouvement() {
     articleBlock = `<div class="picked">
       <span class="big-num">${esc(a.reference || '··')}</span>
       <span style="min-width:0"><b>${esc(a.nom)}</b><span class="sub">Stock ${a.stocks} · Mini ${a.stocksMini}</span></span>
-      <button class="icon-btn" data-act="mvt-clear" title="Changer">✕</button>
+      <button class="text-btn" data-act="mvt-clear">Changer</button>
     </div>`;
   } else {
     const q = m.q.trim().toLowerCase();
@@ -294,17 +302,17 @@ function scanMouvement() {
     articleBlock = `
       <div class="field-row" style="grid-template-columns:1fr auto">
         <input id="mvt-q" data-bind="mvt.q" value="${esc(m.q)}" placeholder="N° du carton ou nom" inputmode="text" autocomplete="off">
-        <button class="btn" data-act="photo" data-purpose="mvt">📷 Lire</button>
+        <button class="btn" data-act="cam-open" data-mode="mouvement">Scan</button>
       </div>
       <ul class="list suggest" id="mvt-sugg">${suggestHtml(sugg, q)}</ul>`;
   }
   return `
     <section class="card">
       <div class="seg full" style="margin-bottom:14px">
-        <button data-act="mvt-type" data-v="E" class="in ${m.type === 'E' ? 'on' : ''}">＋ Entrée</button>
-        <button data-act="mvt-type" data-v="S" class="out ${m.type === 'S' ? 'on' : ''}">－ Sortie</button>
+        <button data-act="mvt-type" data-v="E" class="in ${m.type === 'E' ? 'on' : ''}">+ Entrée</button>
+        <button data-act="mvt-type" data-v="S" class="out ${m.type === 'S' ? 'on' : ''}">− Sortie</button>
       </div>
-      <div class="field"><span>Article</span>${articleBlock}</div>
+      <div class="field"><span>Produit</span>${articleBlock}</div>
       ${progressHtml()}
       <div class="field-row">
         <div class="field"><span>Quantité</span>
@@ -327,7 +335,7 @@ function scanMouvement() {
 function suggestHtml(list, q) {
   if (!q) return '';
   return list.map((x) => `<li data-act="mvt-pick" data-id="${x.id}"><span class="num">${esc(x.reference || '··')}</span>
-    <span class="grow"><b>${esc(x.nom)}</b><small>Stock ${x.stocks}</small></span></li>`).join('') || '<li class="empty">Aucun article</li>';
+    <span class="grow"><b>${esc(x.nom)}</b><small>Stock ${x.stocks}</small></span></li>`).join('') || '<li class="empty">Aucun produit</li>';
 }
 
 function shelfCounts() {
@@ -357,13 +365,16 @@ function scanInventaire() {
   const refs = db.articles.filter((a) => a.reference);
   let html = '';
   if (!refs.length) {
-    html += `<section class="card"><p class="hint">Aucun article n’a de numéro. Ajoutez le <b>numéro écrit sur les cartons</b> dans la fiche de chaque article.</p></section>`;
+    html += `<section class="card"><p class="hint">Aucun produit n’a de numéro. Ajoutez le <b>numéro écrit sur les cartons</b> dans la fiche de chaque produit.</p></section>`;
   }
 
   html += `<section class="card">
     <h2><i>1</i> Étagère</h2>
     <label class="field"><span>Nom de l’étagère</span><input data-bind="shelfName" value="${esc(ui.shelfName || '')}" placeholder="ex. A-03" autocomplete="off"></label>
-    <button class="btn big accent" data-act="photo" data-purpose="shelf" ${refs.length ? '' : 'disabled'}>📷 Photographier l’étagère</button>
+    <div class="btn-row" style="margin-top:0">
+      <button class="btn big accent" data-act="cam-open" data-mode="inventaire" ${refs.length ? '' : 'disabled'}>Ouvrir la caméra</button>
+      <button class="btn" data-act="photo" data-purpose="shelf" ${refs.length ? '' : 'disabled'}>Importer une photo</button>
+    </div>
     ${progressHtml()}
   </section>`;
 
@@ -380,7 +391,7 @@ function scanInventaire() {
       </div>
       <p class="hint">Touchez un cadre pour l’exclure, une zone vide pour ajouter un carton oublié.</p>
       <table class="table">
-        <thead><tr><th>N°</th><th>Article</th><th class="r">Vis.</th><th class="r">× Prof.</th><th class="r">Total</th></tr></thead>
+        <thead><tr><th>N°</th><th>Produit</th><th class="r">Vis.</th><th class="r">× Prof.</th><th class="r">Total</th></tr></thead>
         <tbody>${codes.map((c) => `<tr>
           <td class="d">${esc(c)}</td>
           <td>${esc(articleByRef(c)?.nom || '')}</td>
@@ -403,9 +414,9 @@ function scanInventaire() {
     const codes = Object.keys(totals).sort(sortNum);
     html += `<section class="card">
       <h2><i>3</i> Inventaire en cours <span class="count">${shelves.length} étag.</span></h2>
-      <div class="chips" style="margin-bottom:12px">${shelves.map((e) => `<button class="chip" data-act="shelf-remove" data-id="${e.id}" title="Retirer">${esc(e.nom)} <small>${Object.values(e.items).reduce((s, it) => s + it.total, 0)} ✕</small></button>`).join('')}</div>
+      <div class="chips" style="margin-bottom:12px">${shelves.map((e) => `<button class="chip" data-act="shelf-remove" data-id="${e.id}" title="Retirer">${esc(e.nom)} <small>${Object.values(e.items).reduce((s, it) => s + it.total, 0)} ×</small></button>`).join('')}</div>
       <table class="table">
-        <thead><tr><th>N°</th><th>Article</th><th class="r">Stock</th><th class="r">Compté</th><th class="r">Écart</th></tr></thead>
+        <thead><tr><th>N°</th><th>Produit</th><th class="r">Stock</th><th class="r">Compté</th><th class="r">Écart</th></tr></thead>
         <tbody>${codes.map((c) => {
           const a = articleByRef(c);
           const diff = a ? totals[c] - a.stocks : 0;
@@ -414,7 +425,7 @@ function scanInventaire() {
             <td class="r d ${diff > 0 ? 'pos' : diff < 0 ? 'neg' : ''}">${diff > 0 ? '+' : ''}${diff}</td></tr>`;
         }).join('')}</tbody>
       </table>
-      <p class="hint">Seuls les articles comptés sont mis à jour. Les écarts sont enregistrés dans l’historique.</p>
+      <p class="hint">Seuls les produits comptés sont mis à jour. Les écarts sont enregistrés dans l’historique.</p>
       <div class="btn-row">
         <button class="btn danger" data-act="inv-clear">Vider</button>
         <button class="btn primary" data-act="inv-apply">Appliquer au stock</button>
@@ -440,12 +451,12 @@ const KINDS = {
   utilisateurs: { label: 'Utilisateurs', one: 'utilisateur', objet: 'U', field: null },
 };
 
-function viewAjouter() {
+function viewProduits() {
   const kinds = Object.entries(KINDS);
   return `
-    <div class="page-title">AJOUTER</div>
+    <div class="page-title">PRODUITS</div>
     <div class="kpis">${kinds.map(([k, d]) => kpi(d.label, db[k].length)).join('')}</div>
-    <button class="btn big primary" data-act="new-article" style="margin-bottom:6px">+ Nouvel article</button>
+    <button class="btn big primary" data-act="new-article" style="margin-bottom:6px">+ Nouveau produit</button>
     <div class="cols">${kinds.map(([k, d], i) => `
       <section class="card">
         <h2><i>${String(i + 1).padStart(2, '0')}</i> ${d.label} <span class="count">${db[k].length}</span></h2>
@@ -471,7 +482,7 @@ function viewParams() {
       <section class="card">
         <h2><i>02</i> Exporter</h2>
         <div class="btn-row" style="margin-top:0">
-          <button class="btn" data-act="export-articles">Articles CSV</button>
+          <button class="btn" data-act="export-articles">Produits CSV</button>
           <button class="btn" data-act="export-historique">Historique CSV</button>
         </div>
         <p class="hint">Fichiers séparés par « ; », lisibles directement dans Excel.</p>
@@ -555,7 +566,7 @@ function closeSheet() {
 let sheetCtx = null;
 
 function sheetHead(tag, title) {
-  return `<div class="sheet-head"><h2><i>${tag}</i> ${title}</h2><button class="icon-btn" data-act="sheet-close">✕</button></div>`;
+  return `<div class="sheet-head"><h2><i>${tag}</i> ${title}</h2><button class="text-btn" data-act="sheet-close">Fermer</button></div>`;
 }
 
 function openArticle(id) {
@@ -564,13 +575,13 @@ function openArticle(id) {
   const recent = id ? db.historique.filter((h) => h.idArticle === id).sort((x, y) => y.date.localeCompare(x.date)).slice(0, 4) : [];
   const warns = confusions(a.reference, id);
   openSheet(`
-    ${sheetHead('FA', id ? 'Fiche article' : 'Nouvel article')}
+    ${sheetHead('FA', id ? 'Fiche produit' : 'Nouveau produit')}
     <section class="card">
       <div class="field-row" style="grid-template-columns:110px 1fr">
         <label class="field"><span>N° carton</span><input id="f-reference" value="${esc(a.reference)}" maxlength="6" autocomplete="off" style="font-family:var(--dot);font-weight:800;font-size:26px;padding:6px 10px;text-transform:uppercase"></label>
         <label class="field"><span>Nom</span><input id="f-nom" value="${esc(a.nom)}" autocomplete="off" style="height:52px"></label>
       </div>
-      <div id="f-warn" class="field" style="margin-top:-8px">${warns.map((w) => `<span class="warn">⚠ ${esc(w)}</span>`).join('')}</div>
+      <div id="f-warn" class="field" style="margin-top:-8px">${warns.map((w) => `<span class="warn">! ${esc(w)}</span>`).join('')}</div>
       <div class="field-row three">
         <label class="field"><span>Catégorie</span><select id="f-cat">${options(db.categories, a.idCategorie, '—')}</select></label>
         <label class="field"><span>Sous-cat.</span><select id="f-sous">${options(db.sousCategories.filter((s) => !a.idCategorie || s.idCategorie === a.idCategorie), a.idSousCategorie, '—')}</select></label>
@@ -624,7 +635,7 @@ function saveArticle() {
   }
   persist();
   closeSheet();
-  toast(id ? 'Article modifié' : 'Article créé');
+  toast(id ? 'Produit modifié' : 'Produit créé');
   render();
 }
 
@@ -667,7 +678,7 @@ function deleteData() {
   const used = d.field ? db.articles.filter((a) => a[d.field] === id).length : 0;
   const children = kind === 'categories' ? db.sousCategories.filter((s) => s.idCategorie === id).length : 0;
   if (used || children) {
-    toast(`Utilisé par ${used ? used + ' article(s)' : children + ' sous-catégorie(s)'}`, true);
+    toast(`Utilisé par ${used ? used + ' produit(s)' : children + ' sous-catégorie(s)'}`, true);
     return;
   }
   if (!confirm(`Supprimer ${x.nom} ?`)) return;
@@ -691,39 +702,35 @@ function pickArticle(title, list, callback, nullLabel) {
 
 // ---------------------------------------------------------------- photo / OCR
 
-async function handlePhoto(file) {
-  const purpose = ui.photoPurpose;
+// Photo d'étagère (importée ou prise par la caméra) → cartons comptés par numéro.
+// `source` est un fichier image ou une image déjà préparée { canvas, w, h, display }.
+async function analyzeShelf(source) {
   const refs = db.articles.filter((a) => a.reference);
+  ui.tab = 'scan';
+  ui.page = null;
+  ui.scanMode = 'inventaire';
+  ui.shelf = null;
   ui.ocr = { p: 0, text: 'Préparation de la photo' };
   $('busy').classList.remove('hidden');
-  if (purpose === 'shelf') ui.shelf = null;
   render();
   try {
-    const prepared = await Ocr.prepare(file);
+    const prepared = source instanceof Blob ? await Ocr.prepare(source) : source;
     const found = await Ocr.read(prepared, refs.map((a) => a.reference), (p, text) => {
       ui.ocr = { p, text };
       const bar = $('ocr-bar');
       if (bar) { bar.style.width = Math.round(p * 100) + '%'; $('ocr-text').textContent = text + '…'; }
     });
     ui.ocr = null;
-    if (purpose === 'shelf') {
-      const depths = {};
-      refs.forEach((a) => { depths[a.reference] = a.profondeur || 1; });
-      ui.shelf = {
-        img: prepared.display,
-        depths,
-        detections: found.map((d) => ({ ...d, active: !!d.code, manual: false })),
-      };
-      const n = found.filter((d) => d.code).length;
-      toast(n ? `${n} carton${n > 1 ? 's' : ''} reconnu${n > 1 ? 's' : ''}` : 'Aucun numéro reconnu', !n);
-      render();
-    } else {
-      const codes = [...new Set(found.filter((d) => d.code).map((d) => d.code))];
-      render();
-      if (codes.length === 1) selectMvtArticle(articleByRef(codes[0]).id);
-      else if (codes.length > 1) pickArticle('Plusieurs numéros lus', codes.map(articleByRef), (id) => id && selectMvtArticle(id));
-      else toast('Aucun numéro reconnu', true);
-    }
+    const depths = {};
+    refs.forEach((a) => { depths[a.reference] = a.profondeur || 1; });
+    ui.shelf = {
+      img: prepared.display,
+      depths,
+      detections: found.map((d) => ({ ...d, active: !!d.code, manual: false })),
+    };
+    const n = found.filter((d) => d.code).length;
+    toast(n ? `${n} carton${n > 1 ? 's' : ''} reconnu${n > 1 ? 's' : ''}` : 'Aucun numéro reconnu', !n);
+    render();
   } catch (err) {
     console.error(err);
     ui.ocr = null;
@@ -738,6 +745,183 @@ function selectMvtArticle(id) {
   ui.mvt.articleId = id;
   ui.mvt.q = '';
   render();
+}
+
+// Enregistre l'entrée / sortie en cours (ui.mvt). Renvoie true si c'est fait.
+function submitMovement() {
+  const m = ui.mvt;
+  const a = byId(db.articles, m.articleId);
+  if (!a) return false;
+  if (m.type === 'S' && m.qty > a.stocks && !confirm(`Stock actuel : ${a.stocks}. Sortir ${m.qty} quand même ?`)) return false;
+  addMovement(a, m.type, m.qty, m.userId, 'scan');
+  persist();
+  const msg = `${m.type === 'E' ? 'Entrée' : 'Sortie'} ${m.qty} × ${a.reference || a.nom} — stock ${a.stocks}`;
+  ui.mvt = { ...m, articleId: null, qty: 1, q: '' };
+  render();
+  toast(aCommander(a) ? msg + ' · À commander' : msg, aCommander(a));
+  return true;
+}
+
+// ---------------------------------------------------------------- caméra intégrée
+// Mouvement : lecture en continu du numéro dans le viseur, puis fiche produit par-dessus.
+// Inventaire : déclencheur → photo de l'étagère → vérification.
+
+const cam = { mode: 'mouvement', stream: null, track: null, torch: false, timer: null, busy: false, foundId: null };
+const camOpen = () => !$('cam').classList.contains('hidden');
+
+async function openCamera(mode) {
+  cam.mode = mode || ui.scanMode;
+  cam.foundId = null;
+  if (!db.articles.some((a) => a.reference)) {
+    toast('Ajoutez d’abord le N° carton de vos produits', true);
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast('Caméra indisponible ici : importez une photo', true);
+    return;
+  }
+  $('cam').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  renderCam();
+  try {
+    cam.stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
+    if (!camOpen()) { cam.stream.getTracks().forEach((t) => t.stop()); cam.stream = null; return; }
+    const video = $('cam-video');
+    video.srcObject = cam.stream;
+    await video.play();
+    cam.track = cam.stream.getVideoTracks()[0];
+    const caps = cam.track.getCapabilities?.() || {};
+    $('cam-torch').classList.toggle('hidden', !caps.torch);
+    startCamLoop();
+  } catch (err) {
+    console.error(err);
+    closeCamera();
+    toast(err.name === 'NotAllowedError' ? 'Accès à la caméra refusé' : 'Caméra indisponible', true);
+  }
+}
+
+function closeCamera() {
+  clearTimeout(cam.timer);
+  cam.timer = null;
+  cam.stream?.getTracks().forEach((t) => t.stop());
+  Object.assign(cam, { stream: null, track: null, torch: false, foundId: null });
+  $('cam-video').srcObject = null;
+  $('cam-torch').classList.add('hidden');
+  $('cam').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function renderCam() {
+  $('cam-seg').innerHTML = [['mouvement', 'Mouvement'], ['inventaire', 'Inventaire']]
+    .map(([k, l]) => `<button data-act="cam-mode" data-v="${k}" class="${cam.mode === k ? 'on' : ''}">${l}</button>`).join('');
+  $('cam-torch').classList.toggle('on', cam.torch);
+  $('cam-reticle').classList.toggle('hidden', cam.mode !== 'mouvement' || !!cam.foundId);
+
+  const bottom = $('cam-bottom');
+  if (cam.mode === 'inventaire') {
+    const n = db.inventaire.etageres.length;
+    bottom.innerHTML = `
+      <div class="cam-hint">Cadrez toute l’étagère, <b>de face</b></div>
+      <div class="cam-row">
+        <button class="cam-btn" data-act="photo" data-purpose="shelf">Importer</button>
+        <button class="shutter" data-act="cam-shoot" aria-label="Photographier l’étagère"></button>
+        <button class="cam-btn" data-act="cam-close">${n ? `Inventaire · ${n}` : 'Inventaire'}</button>
+      </div>`;
+  } else if (cam.foundId) {
+    const a = byId(db.articles, cam.foundId);
+    const m = ui.mvt;
+    bottom.innerHTML = `
+      <div class="cam-card">
+        <div class="picked">
+          <span class="big-num">${esc(a.reference)}</span>
+          <span style="min-width:0"><b>${esc(a.nom)}</b><span class="sub">Stock ${a.stocks} · Mini ${a.stocksMini}</span></span>
+          <button class="text-btn" data-act="cam-rescan">Autre</button>
+        </div>
+        <div class="seg full">
+          <button data-act="mvt-type" data-v="E" class="in ${m.type === 'E' ? 'on' : ''}">+ Entrée</button>
+          <button data-act="mvt-type" data-v="S" class="out ${m.type === 'S' ? 'on' : ''}">− Sortie</button>
+        </div>
+        <div class="stepper">
+          <button class="btn" data-act="qty" data-d="-1">−</button>
+          <input type="number" min="1" inputmode="numeric" data-bind="mvt.qty" value="${m.qty}">
+          <button class="btn" data-act="qty" data-d="1">+</button>
+        </div>
+        <button class="btn big ${m.type === 'E' ? 'primary' : 'accent'}" data-act="cam-submit">
+          Valider ${m.type === 'E' ? 'l’entrée' : 'la sortie'} · ${m.type === 'E' ? '+' : '−'}${m.qty}
+        </button>
+      </div>`;
+  } else {
+    bottom.innerHTML = `
+      <div class="cam-hint">Visez le <b>numéro</b> écrit sur le carton</div>
+      <div class="cam-row">
+        <button class="cam-btn" data-act="cam-manual">Saisir</button>
+        <span></span><span></span>
+      </div>`;
+  }
+}
+
+function startCamLoop() {
+  clearTimeout(cam.timer);
+  if (cam.stream && cam.mode === 'mouvement' && !cam.foundId) cam.timer = setTimeout(camTick, 400);
+}
+
+// Découpe la zone du viseur dans l'image vidéo (la vidéo est affichée en "cover").
+function reticleCrop(video) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const box = video.getBoundingClientRect();
+  const r = $('cam-reticle').getBoundingClientRect();
+  const scale = Math.max(box.width / vw, box.height / vh);
+  const ox = box.left + (box.width - vw * scale) / 2;
+  const oy = box.top + (box.height - vh * scale) / 2;
+  const sx = (r.left - ox) / scale, sy = (r.top - oy) / scale;
+  const sw = r.width / scale, sh = r.height / scale;
+  const w = 640, h = Math.max(1, Math.round((640 * sh) / sw));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d', { willReadFrequently: true }).drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+  return { canvas, w, h };
+}
+
+async function camTick() {
+  const video = $('cam-video');
+  if (!cam.stream || cam.mode !== 'mouvement' || cam.foundId) return;
+  if (video.readyState >= 2 && !cam.busy) {
+    cam.busy = true;
+    try {
+      const refs = db.articles.filter((a) => a.reference).map((a) => a.reference);
+      const found = await Ocr.read(reticleCrop(video), refs, undefined, { radius: 24, maxCharH: 0.95 });
+      const hit = found.find((d) => d.code);
+      if (hit && cam.stream && cam.mode === 'mouvement' && !cam.foundId) {
+        cam.foundId = articleByRef(hit.code).id;
+        ui.mvt.articleId = cam.foundId;
+        ui.mvt.qty = 1;
+        navigator.vibrate?.(40);
+        renderCam();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    cam.busy = false;
+  }
+  startCamLoop();
+}
+
+function camShoot() {
+  const video = $('cam-video');
+  if (!cam.stream || video.readyState < 2) return;
+  const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+  const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0, w, h);
+  const prepared = { canvas, w, h, display: canvas.toDataURL('image/jpeg', 0.82) };
+  closeCamera();
+  analyzeShelf(prepared);
 }
 
 function onStageTap(ev) {
@@ -764,7 +948,7 @@ function onMarkerTap(i) {
     return;
   }
   const refs = db.articles.filter((a) => a.reference).sort((a, b) => sortNum(a.reference, b.reference));
-  pickArticle(`Lu « ${d.raw} » : quel article ?`, refs, (id) => {
+  pickArticle(`Lu « ${d.raw} » : quel produit ?`, refs, (id) => {
     if (!id) ui.shelf.detections.splice(i, 1);
     else { d.code = byId(db.articles, id).reference; d.active = true; }
     render();
@@ -793,7 +977,14 @@ const today = () => new Date().toISOString().slice(0, 10);
 // ---------------------------------------------------------------- actions
 
 const ACT = {
-  tab: (el) => { ui.tab = el.dataset.tab; ui.page = null; render(); scrollTo(0, 0); },
+  tab: (el) => {
+    ui.tab = el.dataset.tab;
+    ui.page = null;
+    render();
+    scrollTo(0, 0);
+    // SCAN ouvre directement la caméra
+    if (ui.tab === 'scan') openCamera(ui.scanMode);
+  },
   page: (el) => { ui.page = el.dataset.page; if (ui.page === 'historique') ui.histArticle = null; render(); scrollTo(0, 0); },
   back: () => { ui.page = null; render(); },
   'toggle-theme': () => {
@@ -820,7 +1011,7 @@ const ACT = {
     if (!confirm(`Supprimer « ${a.nom} » ?`)) return;
     db.articles = db.articles.filter((x) => x !== a);
     logEvent('A', a.nom, 'S');
-    persist(); closeSheet(); toast('Article supprimé'); render();
+    persist(); closeSheet(); toast('Produit supprimé'); render();
   },
   'article-history': () => { ui.page = 'historique'; ui.histArticle = sheetCtx.id; closeSheet(); render(); scrollTo(0, 0); },
   'article-move': () => { const id = sheetCtx.id; closeSheet(); ui.tab = 'scan'; ui.page = null; ui.scanMode = 'mouvement'; selectMvtArticle(id); },
@@ -834,24 +1025,47 @@ const ACT = {
   pick: (el) => { const cb = sheetCtx.callback; closeSheet(); cb(el.dataset.id || null); },
 
   'scan-mode': (el) => { ui.scanMode = el.dataset.v; render(); },
-  'mvt-type': (el) => { ui.mvt.type = el.dataset.v; render(); },
+  'mvt-type': (el) => { ui.mvt.type = el.dataset.v; render(); if (camOpen()) renderCam(); },
   'mvt-pick': (el) => selectMvtArticle(el.dataset.id),
   'mvt-clear': () => { ui.mvt.articleId = null; render(); setTimeout(() => $('mvt-q')?.focus(), 30); },
-  qty: (el) => { ui.mvt.qty = Math.max(1, ui.mvt.qty + int(el.dataset.d, -1)); render(); },
-  'mvt-submit': () => {
-    const m = ui.mvt;
-    const a = byId(db.articles, m.articleId);
-    if (!a) return;
-    if (m.type === 'S' && m.qty > a.stocks && !confirm(`Stock actuel : ${a.stocks}. Sortir ${m.qty} quand même ?`)) return;
-    addMovement(a, m.type, m.qty, m.userId, 'scan');
-    persist();
-    const msg = `${m.type === 'E' ? 'Entrée' : 'Sortie'} ${m.qty} × ${a.reference || a.nom} — stock ${a.stocks}`;
-    ui.mvt = { ...m, articleId: null, qty: 1, q: '' };
+  qty: (el) => { ui.mvt.qty = Math.max(1, ui.mvt.qty + int(el.dataset.d, -1)); render(); if (camOpen()) renderCam(); },
+  'mvt-submit': submitMovement,
+
+  'cam-open': (el) => { ui.scanMode = el.dataset.mode; render(); openCamera(el.dataset.mode); },
+  'cam-close': () => { closeCamera(); render(); },
+  'cam-mode': (el) => {
+    cam.mode = ui.scanMode = el.dataset.v;
+    cam.foundId = null;
+    renderCam();
     render();
-    toast(aCommander(a) ? msg + ' · À commander' : msg, aCommander(a));
+    startCamLoop();
+  },
+  'cam-torch': () => {
+    cam.torch = !cam.torch;
+    cam.track?.applyConstraints({ advanced: [{ torch: cam.torch }] }).catch(() => {});
+    renderCam();
+  },
+  'cam-shoot': camShoot,
+  'cam-rescan': () => { cam.foundId = null; ui.mvt.articleId = null; renderCam(); startCamLoop(); },
+  'cam-submit': () => {
+    if (!submitMovement()) return;
+    cam.foundId = null;
+    renderCam();
+    startCamLoop();
+  },
+  'cam-manual': () => {
+    closeCamera();
+    ui.scanMode = 'mouvement';
+    ui.mvt.articleId = null;
+    render();
+    setTimeout(() => $('mvt-q')?.focus(), 30);
   },
 
-  photo: (el) => { ui.photoPurpose = el.dataset.purpose; $('photo').click(); },
+  photo: (el) => {
+    if (camOpen()) closeCamera();
+    ui.photoPurpose = el.dataset.purpose;
+    $('photo').click();
+  },
   stage: (el, ev) => onStageTap(ev),
   marker: (el) => onMarkerTap(int(el.dataset.i)),
   'shelf-cancel': () => { ui.shelf = null; render(); },
@@ -879,7 +1093,7 @@ const ACT = {
   'inv-apply': () => {
     const totals = inventoryTotals();
     const changes = Object.entries(totals).map(([code, n]) => [articleByRef(code), n]).filter(([a, n]) => a && a.stocks !== n);
-    if (!confirm(changes.length ? `Mettre à jour ${changes.length} article(s) ?` : 'Aucun écart. Clôturer l’inventaire ?')) return;
+    if (!confirm(changes.length ? `Mettre à jour ${changes.length} produit(s) ?` : 'Aucun écart. Clôturer l’inventaire ?')) return;
     changes.forEach(([a, n]) => {
       const delta = n - a.stocks;
       addMovement(a, delta > 0 ? 'E' : 'S', Math.abs(delta), '', 'inventaire');
@@ -897,10 +1111,10 @@ const ACT = {
       a.reference, a.nom, nomOf(db.categories, a.idCategorie), nomOf(db.sousCategories, a.idSousCategorie),
       nomOf(db.marques, a.idMarque), a.stocks, a.stocksMini, aCommander(a) ? Math.max(0, a.stocksMini - a.stocks) : 0,
     ]));
-    download(`articles-${today()}.csv`, csv(rows), 'text/csv;charset=utf-8');
+    download(`produits-${today()}.csv`, csv(rows), 'text/csv;charset=utf-8');
   },
   'export-historique': () => {
-    const rows = [['Date', 'N°', 'Article', 'Type', 'Quantité', 'Personne', 'Origine']];
+    const rows = [['Date', 'N°', 'Produit', 'Type', 'Quantité', 'Personne', 'Origine']];
     [...db.historique].sort((a, b) => b.date.localeCompare(a.date)).forEach((h) => {
       const a = byId(db.articles, h.idArticle);
       rows.push([fmtDateLong(h.date), a?.reference || '', a?.nom || 'Supprimé', h.type === 'E' ? 'Entrée' : 'Sortie', h.quantite,
@@ -952,12 +1166,12 @@ document.addEventListener('input', (ev) => {
 
 document.addEventListener('change', (ev) => {
   const el = ev.target;
-  if (el.dataset.bind === 'mvt.qty') render();
+  if (el.dataset.bind === 'mvt.qty') { render(); if (camOpen()) renderCam(); }
   if (el.dataset.actChange === 'depth') {
     ui.shelf.depths[el.dataset.code] = int(el.value, 1);
     render();
   }
-  // Fiche article : la catégorie filtre les sous-catégories
+  // Fiche produit : la catégorie filtre les sous-catégories
   if (el.id === 'f-cat') {
     const cur = $('f-sous').value;
     const list = db.sousCategories.filter((s) => !el.value || s.idCategorie === el.value);
@@ -968,17 +1182,24 @@ document.addEventListener('change', (ev) => {
 document.addEventListener('input', (ev) => {
   if (ev.target.id !== 'f-reference') return;
   const code = Ocr.normalize(ev.target.value);
-  $('f-warn').innerHTML = confusions(code, sheetCtx?.id).map((w) => `<span class="warn">⚠ ${esc(w)}</span>`).join('');
+  $('f-warn').innerHTML = confusions(code, sheetCtx?.id).map((w) => `<span class="warn">! ${esc(w)}</span>`).join('');
 });
 
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && !$('sheet').classList.contains('hidden')) closeSheet();
+  if (ev.key !== 'Escape') return;
+  if (camOpen()) { closeCamera(); render(); }
+  else if (!$('sheet').classList.contains('hidden')) closeSheet();
+});
+
+// Appli en arrière-plan : on coupe la caméra
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && camOpen()) { closeCamera(); render(); }
 });
 
 $('photo').addEventListener('change', (ev) => {
   const file = ev.target.files[0];
   ev.target.value = '';
-  if (file) handlePhoto(file);
+  if (file) analyzeShelf(file);
 });
 
 $('restore').addEventListener('change', async (ev) => {
@@ -988,7 +1209,7 @@ $('restore').addEventListener('change', async (ev) => {
   try {
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data.articles)) throw new Error('fichier invalide');
-    if (!confirm(`Restaurer ${data.articles.length} articles ? Les données actuelles seront remplacées.`)) return;
+    if (!confirm(`Restaurer ${data.articles.length} produits ? Les données actuelles seront remplacées.`)) return;
     db = { ...emptyData(), ...data };
     persist(); applyTheme(); render(); toast('Sauvegarde restaurée');
   } catch (err) {
