@@ -905,7 +905,7 @@ function renderCam() {
 
 function startCamLoop() {
   clearTimeout(cam.timer);
-  if (cam.stream && cam.mode === 'mouvement' && !cam.foundId) cam.timer = setTimeout(camTick, 400);
+  if (cam.stream && cam.mode === 'mouvement' && !cam.foundId) cam.timer = setTimeout(camTick, 600);
 }
 
 // Découpe la zone du viseur dans l'image vidéo (la vidéo est affichée en "cover").
@@ -918,7 +918,8 @@ function reticleCrop(video) {
   const oy = box.top + (box.height - vh * scale) / 2;
   const sx = (r.left - ox) / scale, sy = (r.top - oy) / scale;
   const sw = r.width / scale, sh = r.height / scale;
-  const w = 640, h = Math.max(1, Math.round((640 * sh) / sw));
+  // au moins la résolution native du viseur (un trait de stylo fin se casse si on réduit)
+  const w = Math.round(Math.min(900, Math.max(640, sw))), h = Math.max(1, Math.round((w * sh) / sw));
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -946,7 +947,8 @@ async function camTick() {
         return Ai.readTiles(canvas, cands.slice(0, 4), codes);
       } : null;
       const onAiError = (err) => { cam.aiDownUntil = Date.now() + 30000; aiError(err); };
-      const found = await Ocr.read(reticleCrop(video), refs, undefined, { radius: 24, maxCharH: 0.95, ai, onAiError });
+      const crop = reticleCrop(video);
+      const found = await Ocr.read(crop, refs, undefined, { radius: Math.round(crop.w / 26), maxCharH: 0.95, maxGroups: 6, ai, onAiError });
       const hit = found.find((d) => d.code);
       // Sans IA (ou IA indisponible) : même numéro lu sur deux images de suite
       const confirmed = hit && (hit.ai || (!aiOn && cam.lastCode === hit.code));
@@ -1248,9 +1250,22 @@ const ACT = {
   },
 };
 
+// Caméra : on réagit dès que le doigt se lève. Sur iPhone, au-dessus d'une vidéo,
+// le "click" de synthèse arrive en retard ou se perd.
+let lastTouchAct = 0;
+document.addEventListener('pointerup', (ev) => {
+  if (ev.pointerType === 'mouse') return;
+  const el = ev.target.closest('#cam [data-act]');
+  if (!el || el.disabled) return;
+  lastTouchAct = Date.now();
+  ev.preventDefault();
+  ACT[el.dataset.act]?.(el, ev);
+});
+
 document.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]');
   if (!el || el.disabled) return;
+  if (el.closest('#cam') && Date.now() - lastTouchAct < 700) return; // déjà traité au pointerup
   const fn = ACT[el.dataset.act];
   if (fn) fn(el, ev);
 });

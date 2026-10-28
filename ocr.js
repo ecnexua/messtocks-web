@@ -35,11 +35,33 @@
     return workerPromise;
   }
 
+  // WebAssembly (rapide, sans compilation qui fige l'écran), sinon processeur.
+  // Pas de WebGL : sur iPhone il recompile ses shaders à chaque nouveau nombre de chiffres.
+  const WASM_DIR = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/';
+  async function initBackend() {
+    try {
+      if (!tf.wasm) {
+        await new Promise((ok, ko) => {
+          const s = document.createElement('script');
+          s.src = WASM_DIR + 'tf-backend-wasm.min.js';
+          s.onload = ok;
+          s.onerror = ko;
+          document.head.appendChild(s);
+        });
+      }
+      tf.wasm.setWasmPaths(WASM_DIR);
+      if (await tf.setBackend('wasm')) return;
+    } catch (err) {
+      console.warn('WebAssembly indisponible', err);
+    }
+    await tf.setBackend('cpu');
+  }
+
   let modelPromise = null;
   function getModel() {
     if (!window.tf) return Promise.resolve(null); // tfjs se charge encore : Tesseract seul cette fois
     if (!modelPromise) {
-      modelPromise = tf.loadLayersModel(MODEL_URL);
+      modelPromise = initBackend().then(() => tf.loadLayersModel(MODEL_URL));
       modelPromise.catch((err) => { console.warn('Modèle chiffres indisponible', err); modelPromise = null; });
     }
     return modelPromise.catch(() => null);
@@ -139,13 +161,15 @@
     for (let s = 0; s < w * h; s++) {
       if (!ink[s] || label[s]) continue;
       const id = comps.length;
-      let minx = w, miny = h, maxx = 0, maxy = 0, n = 0;
+      let minx = w, miny = h, maxx = 0, maxy = 0, n = 0, edge = 0;
       label[s] = id;
       stack.push(s);
       while (stack.length) {
         const p = stack.pop();
         const x = p % w, y = (p - x) / w;
         n++;
+        // pixel de bord : un voisin hors encre (sert à estimer l'épaisseur du trait)
+        if (x === 0 || y === 0 || x === w - 1 || y === h - 1 || !ink[p - 1] || !ink[p + 1] || !ink[p - w] || !ink[p + w]) edge++;
         if (x < minx) minx = x; if (x > maxx) maxx = x;
         if (y < miny) miny = y; if (y > maxy) maxy = y;
         if (x > 0 && ink[p - 1] && !label[p - 1]) { label[p - 1] = id; stack.push(p - 1); }
@@ -153,12 +177,14 @@
         if (y > 0 && ink[p - w] && !label[p - w]) { label[p - w] = id; stack.push(p - w); }
         if (y < h - 1 && ink[p + w] && !label[p + w]) { label[p + w] = id; stack.push(p + w); }
       }
-      comps.push({ id, x: minx, y: miny, w: maxx - minx + 1, h: maxy - miny + 1, n });
+      comps.push({ id, x: minx, y: miny, w: maxx - minx + 1, h: maxy - miny + 1, n, thick: (2 * n) / Math.max(1, edge) });
     }
 
     const isChar = (c) => {
       const ratio = c.w / c.h, fill = c.n / (c.w * c.h);
-      return c.h > h * 0.012 && c.h < h * maxCharH && ratio > 0.08 && ratio < 2.2 && fill > 0.03 && fill < 0.9;
+      // trait proportionné à la taille : écarte bords de feuille, câbles, contours fins et grands
+      return c.h > h * 0.012 && c.h < h * maxCharH && ratio > 0.08 && ratio < 2.2 && fill > 0.03 && fill < 0.9
+        && c.thick / c.h >= 0.025;
     };
     const chars = comps.slice(1).filter(isChar).sort((a, b) => a.x - b.x);
     // Traits horizontaux isolés : souvent la base d'un 2 (stylo levé), rattachés plus bas
@@ -372,7 +398,12 @@
   async function readPass(prepared, k, strict, codes, worker, model, opts, onProgress) {
     const { w, h } = prepared;
     const { ink, gray } = inkMask(prepared.canvas, opts.radius, k);
-    const groups = findNumbers(ink, w, h, opts.maxCharH || 0.4).filter((g) => onLightBackground(gray, ink, w, h, g));
+    let groups = findNumbers(ink, w, h, opts.maxCharH || 0.4).filter((g) => onLightBackground(gray, ink, w, h, g));
+    // Viseur : seulement les zones les plus centrales (lecture rapide à chaque image)
+    if (opts.maxGroups) {
+      const d = (g) => Math.hypot((g.x + g.w / 2) / w - 0.5, (g.y + g.h / 2) / h - 0.5);
+      groups = groups.sort((a, b) => d(a) - d(b)).slice(0, opts.maxGroups);
+    }
 
     // Réseau : tous les caractères de tous les numéros en un seul passage
     let probsByGroup = groups.map(() => null);
@@ -380,7 +411,16 @@
       const all = groups.flatMap((g) => g.glyphs.map((gl) => glyphTensorData(g.label, w, gl)));
       const flat = new Float32Array(all.length * 784);
       all.forEach((a, i) => flat.set(a, i * 784));
-      const out = tf.tidy(() => model.predict(tf.tensor4d(flat, [all.length, 28, 28, 1])).arraySync());
+      // par paquets de 8, en rendant la main à l'écran entre deux paquets
+      const out = [];
+      for (let s = 0; s < all.length; s += 8) {
+        const n = Math.min(8, all.length - s);
+        const x = tf.tensor4d(flat.subarray(s * 784, (s + n) * 784), [n, 28, 28, 1]);
+        const y = model.predict(x);
+        out.push(...(await y.array()));
+        tf.dispose([x, y]);
+        await new Promise((r) => setTimeout(r, 0));
+      }
       let k = 0;
       probsByGroup = groups.map((g) => g.glyphs.map(() => out[k++]));
     }
@@ -430,6 +470,10 @@
     }
     return found;
   }
+
+  // Préchargement du réseau peu après l'ouverture de l'app : le premier scan est immédiat
+  const warm = () => (window.tf ? getModel() : setTimeout(warm, 500));
+  window.addEventListener('load', () => setTimeout(warm, 800));
 
   window.Ocr = { prepare, read, normalize, _debug: { inkMask, findNumbers, onLightBackground, glyphTensorData } };
 })();

@@ -473,3 +473,11 @@ input:focus, select:focus { outline: none; border-color: var(--ink); }
   max-width: calc(100% - 32px); text-align: center;
 }
 .toast.warn { background: var(--accent); color: var(--accent-ink); }
+
+/* ------------------------------------------------------------ retour d'appui */
+button { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.btn:active:not(:disabled), .cam-btn:active, .text-btn:active, .chip:active,
+.seg button:active, .picker button:active, .tabbar button:active {
+  transform: scale(0.95); opacity: 0.8; transition: transform 0.05s, opacity 0.05s;
+}
+.shutter:active:not(:disabled) { transform: scale(0.9); }
