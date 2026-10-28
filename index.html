@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="fr" data-theme="paper">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e3e3e3">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>MesStocks</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <button class="brand" data-act="tab" data-tab="recap">
+      <span class="logo">MES·STOCKS</span><span class="ver">WEB 1.0</span>
+    </button>
+    <div class="top-actions">
+      <span id="busy" class="busy hidden">LECTURE<b>.</b><b>.</b><b>.</b></span>
+      <button class="icon-btn" data-act="page" data-page="evenements" title="Derniers évènements">⏱</button>
+      <button class="icon-btn" data-act="toggle-theme" title="Thème">◐</button>
+    </div>
+  </header>
+
+  <main id="view" class="view"></main>
+
+  <nav class="tabbar">
+    <button data-act="tab" data-tab="recap"><i>01</i><span>Récap</span></button>
+    <button data-act="tab" data-tab="recherche"><i>02</i><span>Chercher</span></button>
+    <button data-act="tab" data-tab="scan" class="scan-tab"><b>SCAN</b></button>
+    <button data-act="tab" data-tab="ajouter"><i>04</i><span>Ajouter</span></button>
+    <button data-act="tab" data-tab="params"><i>05</i><span>Params</span></button>
+  </nav>
+
+  <div id="sheet" class="sheet hidden" data-act="sheet-backdrop">
+    <div class="sheet-panel" role="dialog" aria-modal="true">
+      <div class="sheet-grip"></div>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <input id="photo" type="file" accept="image/*" capture="environment" hidden>
+  <input id="restore" type="file" accept="application/json,.json" hidden>
+
+  <script src="ocr.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

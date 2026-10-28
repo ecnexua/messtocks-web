@@ -1,0 +1,198 @@
+// Lecture des numéros écrits sur les cartons, dans le navigateur.
+// 1. seuillage local (le texte foncé ressort, quel que soit l'éclairage)
+// 2. on repère les taches qui ont une forme de chiffre et on les regroupe en numéros
+// 3. Tesseract.js lit chaque numéro isolément (bien plus fiable que la photo entière)
+// Expose window.Ocr = { prepare(file), read(prepared, codes, onProgress), normalize(text) }.
+
+(function () {
+  const MAX_SIDE = 1600;      // taille de l'image analysée (px)
+  const THRESHOLD_K = 0.3;    // un pixel est "encre" s'il est 30 % plus sombre que son voisinage
+  const CROP_TEXT_H = 48;     // hauteur des chiffres envoyés à Tesseract (px)
+  const MIN_CONFIDENCE = 40;  // en dessous, la lecture est ignorée
+
+  // Confusions fréquentes quand un chiffre est attendu
+  const DIGIT_FIXES = { O: '0', D: '0', Q: '0', U: '0', I: '1', L: '1', J: '1', T: '7', S: '5', B: '8', Z: '2', G: '6', A: '4' };
+
+  const normalize = (t) => String(t).toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  let workerPromise = null;
+
+  function getWorker(onProgress) {
+    if (!workerPromise) {
+      workerPromise = Tesseract.createWorker('eng', 1, {
+        logger: (m) => {
+          if (m.status !== 'recognizing text' && typeof m.progress === 'number') onProgress(m.progress * 0.25, 'Chargement du lecteur');
+        },
+      });
+      workerPromise.catch(() => { workerPromise = null; });
+    }
+    return workerPromise;
+  }
+
+  async function prepare(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      const scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * scale);
+      const h = Math.round(img.naturalHeight * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d', { willReadFrequently: true }).drawImage(img, 0, 0, w, h);
+      return { canvas, display: canvas.toDataURL('image/jpeg', 0.82), w, h };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // Masque "encre" par seuillage local (moyenne sur une fenêtre, via image intégrale).
+  function inkMask(canvas) {
+    const w = canvas.width, h = canvas.height;
+    const px = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+    const gray = new Float32Array(w * h);
+    for (let i = 0, j = 0; i < px.length; i += 4, j++) gray[j] = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+
+    const W = w + 1;
+    const integral = new Float64Array(W * (h + 1));
+    for (let y = 1; y <= h; y++) {
+      let row = 0;
+      for (let x = 1; x <= w; x++) {
+        row += gray[(y - 1) * w + x - 1];
+        integral[y * W + x] = integral[(y - 1) * W + x] + row;
+      }
+    }
+    const r = Math.max(8, Math.round(Math.max(w, h) / 40));
+    const ink = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+      for (let x = 0; x < w; x++) {
+        const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
+        const mean = (integral[y1 * W + x1] - integral[y0 * W + x1] - integral[y1 * W + x0] + integral[y0 * W + x0]) / ((x1 - x0) * (y1 - y0));
+        ink[y * w + x] = gray[y * w + x] < mean * (1 - THRESHOLD_K) ? 1 : 0;
+      }
+    }
+    return ink;
+  }
+
+  // Taches d'encre connexes ayant une forme de caractère, regroupées en numéros.
+  function findNumbers(ink, w, h) {
+    const label = new Int32Array(w * h);
+    const comps = [];
+    const stack = [];
+    for (let s = 0; s < w * h; s++) {
+      if (!ink[s] || label[s]) continue;
+      const id = comps.length + 1;
+      let minx = w, miny = h, maxx = 0, maxy = 0, n = 0;
+      label[s] = id;
+      stack.push(s);
+      while (stack.length) {
+        const p = stack.pop();
+        const x = p % w, y = (p - x) / w;
+        n++;
+        if (x < minx) minx = x; if (x > maxx) maxx = x;
+        if (y < miny) miny = y; if (y > maxy) maxy = y;
+        if (x > 0 && ink[p - 1] && !label[p - 1]) { label[p - 1] = id; stack.push(p - 1); }
+        if (x < w - 1 && ink[p + 1] && !label[p + 1]) { label[p + 1] = id; stack.push(p + 1); }
+        if (y > 0 && ink[p - w] && !label[p - w]) { label[p - w] = id; stack.push(p - w); }
+        if (y < h - 1 && ink[p + w] && !label[p + w]) { label[p + w] = id; stack.push(p + w); }
+      }
+      comps.push({ x: minx, y: miny, w: maxx - minx + 1, h: maxy - miny + 1, n });
+    }
+
+    const chars = comps.filter((c) => {
+      const ratio = c.w / c.h, fill = c.n / (c.w * c.h);
+      return c.h > h * 0.012 && c.h < h * 0.4 && ratio > 0.12 && ratio < 1.6 && fill > 0.12 && fill < 0.9;
+    }).sort((a, b) => a.x - b.x);
+
+    // Deux caractères voisins, de même taille et sur la même ligne = même numéro
+    const parent = chars.map((_, i) => i);
+    const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    for (let i = 0; i < chars.length; i++) {
+      for (let j = i + 1; j < chars.length; j++) {
+        const a = chars[i], b = chars[j];
+        const hi = Math.max(a.h, b.h), lo = Math.min(a.h, b.h);
+        if (b.x - (a.x + a.w) > 0.9 * hi) break;
+        const overlapY = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+        if (overlapY > 0.6 * lo && hi / lo < 1.5) parent[find(j)] = find(i);
+      }
+    }
+    const groups = {};
+    chars.forEach((c, i) => { (groups[find(i)] = groups[find(i)] || []).push(c); });
+
+    return Object.values(groups).filter((g) => g.length <= 6).map((g) => {
+      const x0 = Math.min(...g.map((c) => c.x)), y0 = Math.min(...g.map((c) => c.y));
+      const x1 = Math.max(...g.map((c) => c.x + c.w)), y1 = Math.max(...g.map((c) => c.y + c.h));
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    });
+  }
+
+  // Découpe un numéro en noir sur blanc, à la taille idéale pour Tesseract.
+  function cropNumber(ink, w, h, box) {
+    const pad = Math.round(box.h * 0.5);
+    const scale = CROP_TEXT_H / box.h;
+    const cw = Math.round((box.w + 2 * pad) * scale);
+    const ch = Math.round((box.h + 2 * pad) * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(cw, ch);
+    for (let y = 0; y < ch; y++) {
+      const sy = Math.floor(y / scale) + box.y - pad;
+      for (let x = 0; x < cw; x++) {
+        const sx = Math.floor(x / scale) + box.x - pad;
+        const v = sx >= 0 && sy >= 0 && sx < w && sy < h && ink[sy * w + sx] ? 0 : 255;
+        const p = (y * cw + x) * 4;
+        img.data[p] = img.data[p + 1] = img.data[p + 2] = v;
+        img.data[p + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+
+  function matchCode(text, codes) {
+    if (codes.has(text)) return text;
+    const fixed = text.split('').map((c) => DIGIT_FIXES[c] || c).join('');
+    return codes.has(fixed) ? fixed : null;
+  }
+
+  // Renvoie [{x, y, w, h (fractions de l'image), raw, code|null}]
+  async function read(prepared, codeList, onProgress = () => {}) {
+    const codes = new Set(codeList.map(normalize).filter(Boolean));
+    const chars = new Set('0123456789');
+    codes.forEach((c) => [...c].forEach((ch) => chars.add(ch)));
+
+    const worker = await getWorker(onProgress);
+    await worker.setParameters({
+      tessedit_char_whitelist: [...chars].join(''),
+      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
+    });
+
+    onProgress(0.25, 'Repérage des numéros');
+    await new Promise((r) => setTimeout(r, 0)); // laisse l'interface se mettre à jour
+    const { w, h } = prepared;
+    const ink = inkMask(prepared.canvas);
+    const boxes = findNumbers(ink, w, h);
+
+    const found = [];
+    for (let i = 0; i < boxes.length; i++) {
+      onProgress(0.3 + (0.7 * i) / boxes.length, `Lecture ${i + 1} / ${boxes.length}`);
+      const box = boxes[i];
+      const { data } = await worker.recognize(cropNumber(ink, w, h, box));
+      const text = normalize(data.text);
+      if (!text || data.confidence < MIN_CONFIDENCE) continue;
+      const code = matchCode(text, codes);
+      // Les lectures inconnues trop longues sont du bruit (texte imprimé, dates…)
+      if (!code && text.length > 4) continue;
+      found.push({ x: box.x / w, y: box.y / h, w: box.w / w, h: box.h / h, raw: text, code });
+    }
+    onProgress(1, 'Terminé');
+    return found;
+  }
+
+  window.Ocr = { prepare, read, normalize };
+})();
