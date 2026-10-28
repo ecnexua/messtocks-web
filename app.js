@@ -256,7 +256,7 @@ function viewRecherche() {
   const sous = db.sousCategories.filter((sc) => !s.cat || sc.idCategorie === s.cat);
   const seg = [['tous', 'Tous'], ['commander', 'À commander'], ['ajour', 'À jour']];
   return `
-    <div class="page-title">CHERCHER</div>
+    <div class="page-title">STOCKS</div>
     <div class="search"><input id="q" data-bind="search.q" value="${esc(s.q)}" placeholder="Nom ou numéro" autocomplete="off" enterkeyhint="search"></div>
     <div class="filters">
       <select data-bind="search.cat">${options(db.categories, s.cat, 'Catégorie')}</select>
@@ -766,7 +766,7 @@ function submitMovement() {
 // Mouvement : lecture en continu du numéro dans le viseur, puis fiche produit par-dessus.
 // Inventaire : déclencheur → photo de l'étagère → vérification.
 
-const cam = { mode: 'mouvement', stream: null, track: null, torch: false, timer: null, busy: false, foundId: null };
+const cam = { mode: 'mouvement', stream: null, track: null, torch: false, timer: null, busy: false, foundId: null, lastCode: null };
 const camOpen = () => !$('cam').classList.contains('hidden');
 
 async function openCamera(mode) {
@@ -895,7 +895,11 @@ async function camTick() {
       const refs = db.articles.filter((a) => a.reference).map((a) => a.reference);
       const found = await Ocr.read(reticleCrop(video), refs, undefined, { radius: 24, maxCharH: 0.95 });
       const hit = found.find((d) => d.code);
-      if (hit && cam.stream && cam.mode === 'mouvement' && !cam.foundId) {
+      // Même numéro lu sur deux images de suite avant d'afficher le produit
+      const confirmed = hit && cam.lastCode === hit.code;
+      cam.lastCode = hit ? hit.code : null;
+      if (confirmed && cam.stream && cam.mode === 'mouvement' && !cam.foundId) {
+        cam.lastCode = null;
         cam.foundId = articleByRef(hit.code).id;
         ui.mvt.articleId = cam.foundId;
         ui.mvt.qty = 1;
