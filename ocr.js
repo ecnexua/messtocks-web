@@ -111,7 +111,7 @@
     }
     if (!nb || !nf) return false;
     const mean = bg / nb, std = Math.sqrt(Math.max(0, bg2 / nb - mean * mean));
-    return mean >= 90 && mean - fg / nf >= 35 && std <= 50;
+    return mean >= 100 && mean - fg / nf >= 40 && std <= 45;
   }
 
   // ------------------------------------------------------------ segmentation
@@ -302,11 +302,26 @@
       const span = [0.25 + (0.75 * p) / passes.length, 0.25 + (0.75 * (p + 1)) / passes.length];
       all.push(...(await readPass(prepared, passes[p], p > 0, codes, worker, model, opts, (f, text) => onProgress(span[0] + f * (span[1] - span[0]), text))));
     }
-    all.sort((a, b) => (b.code ? 1 : 0) - (a.code ? 1 : 0) || b.score - a.score);
-    const found = [];
-    all.forEach((f) => { if (!found.some((g) => overlap(f, g) > 0.3)) found.push(f); });
+    all.sort((a, b) => (b.keep ? 1 : 0) - (a.keep ? 1 : 0) || (b.code ? 1 : 0) - (a.code ? 1 : 0) || b.score - a.score);
+    const candidates = [];
+    all.forEach((f) => { if (!candidates.some((g) => overlap(f, g) > 0.3)) candidates.push(f); });
+
+    // IA (si activée) : elle relit chaque zone repérée et tranche
+    if (opts.ai && candidates.length) {
+      try {
+        onProgress(0.97, 'Vérification par l’IA');
+        const readings = await opts.ai(prepared.canvas, candidates.slice(0, 48), codes);
+        onProgress(1, 'Terminé');
+        return candidates.slice(0, 48)
+          .map((c, i) => ({ ...c, raw: readings[i], code: readings[i] && codes.has(readings[i]) ? readings[i] : null, ai: true }))
+          .filter((c) => c.raw);
+      } catch (err) {
+        console.warn(err);
+        opts.onAiError?.(err);
+      }
+    }
     onProgress(1, 'Terminé');
-    return found;
+    return candidates.filter((c) => c.keep);
   }
 
   function overlap(a, b) {
@@ -352,7 +367,7 @@
       // Second avis : Tesseract sur le numéro entier
       let tessText = '', tessCode = null;
       const sure = best && bestScore > 0.8 && bestScore > 4 * second;
-      if (!sure) {
+      if (!sure && !opts.ai) {
         const { data } = await worker.recognize(cropNumber(ink, w, h, g));
         if (data.confidence >= TESS_MIN_CONF) {
           tessText = normalize(data.text);
@@ -368,13 +383,11 @@
       else if (tessCode && (!probs || probs.length !== tessCode.length || codeScore(tessCode, probs) > 0.02)) code = tessCode;
       else if (best && tessCode === best) code = best;
 
-      const raw = code || (netConf > 0.6 ? netText : tessText);
-      if (!code) {
-        // Les lectures inconnues peu sûres ou trop longues sont du bruit
-        if (!raw || raw.length > 4 || (netConf <= 0.6 && !tessText)) continue;
-      }
+      const raw = code || netText || tessText;
+      // Numéro inconnu : affiché seulement si le réseau est sûr et que Tesseract est d'accord
+      const keep = !!code || (raw.length <= 4 && netConf >= 0.9 && tessText === netText);
       const score = code ? (code === best ? bestScore : 0.5) : netConf;
-      found.push({ x: g.x / w, y: g.y / h, w: g.w / w, h: g.h / h, raw, code, score });
+      found.push({ x: g.x / w, y: g.y / h, w: g.w / w, h: g.h / h, raw, code, score, keep });
     }
     return found;
   }

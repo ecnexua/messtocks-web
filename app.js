@@ -502,8 +502,39 @@ function viewParams() {
           <button class="btn danger" data-act="wipe">Tout effacer</button>
         </div>
       </section>
+      ${aiSettingsHtml()}
     </div>
-    <p class="hint" style="text-align:center;margin-top:16px">Version 1.2 · D’après MesStocks de Christophe Garcia · Interface Font Lab</p>`;
+    <p class="hint" style="text-align:center;margin-top:16px">Version 1.3 ·D’après MesStocks de Christophe Garcia · Interface Font Lab</p>`;
+}
+
+function aiSettingsHtml() {
+  const s = Ai.settings();
+  return `
+      <section class="card">
+        <h2><i>05</i> IA de lecture · Groq ${s.on && s.key ? '<span class="pill accent">Active</span>' : ''}</h2>
+        <div class="seg full" style="margin-bottom:12px">
+          <button data-act="ai-on" data-v="1" class="${s.on ? 'on' : ''}">Activée</button>
+          <button data-act="ai-on" data-v="0" class="${s.on ? '' : 'on'}">Désactivée</button>
+        </div>
+        <label class="field"><span>Clé API Groq</span>
+          <input id="ai-key" type="password" value="${esc(s.key)}" placeholder="gsk_…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label class="field"><span>Modèle</span>
+          <input id="ai-model" value="${esc(s.model)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn" data-act="ai-test">Tester</button>
+          <button class="btn primary" data-act="ai-save">Enregistrer</button>
+        </div>
+        <p class="hint">L’IA relit chaque numéro repéré et écarte le décor. Seuls de petits extraits de la photo autour des numéros sont envoyés à Groq. La clé reste sur cet appareil et n’est pas incluse dans les sauvegardes. Clé gratuite sur console.groq.com.</p>
+      </section>`;
+}
+
+function readAiForm() {
+  const s = Ai.settings();
+  const key = $('ai-key')?.value.trim();
+  const model = $('ai-model')?.value.trim();
+  if (key !== undefined) s.key = key;
+  if (model !== undefined) s.model = model || Ai.DEFAULT_MODEL;
+  return s;
 }
 
 // ---- Historique
@@ -719,7 +750,7 @@ async function analyzeShelf(source) {
       ui.ocr = { p, text };
       const bar = $('ocr-bar');
       if (bar) { bar.style.width = Math.round(p * 100) + '%'; $('ocr-text').textContent = text + '…'; }
-    });
+    }, { ai: Ai.enabled() ? Ai.readTiles : null, onAiError: aiError });
     ui.ocr = null;
     const depths = {};
     refs.forEach((a) => { depths[a.reference] = a.profondeur || 1; });
@@ -766,7 +797,15 @@ function submitMovement() {
 // Mouvement : lecture en continu du numéro dans le viseur, puis fiche produit par-dessus.
 // Inventaire : déclencheur → photo de l'étagère → vérification.
 
-const cam = { mode: 'mouvement', stream: null, track: null, torch: false, timer: null, busy: false, foundId: null, lastCode: null };
+const cam = { mode: 'mouvement', stream: null, track: null, torch: false, timer: null, busy: false, foundId: null, lastCode: null, lastAi: 0 };
+
+// Erreur IA : on prévient (une fois toutes les 20 s) et la lecture locale prend le relais
+let lastAiError = 0;
+function aiError(err) {
+  if (Date.now() - lastAiError < 20000) return;
+  lastAiError = Date.now();
+  toast(err.message + ' — lecture locale', true);
+}
 const camOpen = () => !$('cam').classList.contains('hidden');
 
 async function openCamera(mode) {
@@ -893,10 +932,14 @@ async function camTick() {
     cam.busy = true;
     try {
       const refs = db.articles.filter((a) => a.reference).map((a) => a.reference);
-      const found = await Ocr.read(reticleCrop(video), refs, undefined, { radius: 24, maxCharH: 0.95 });
+      // IA activée : elle relit le viseur au plus toutes les 1,5 s, et c'est elle qui confirme
+      const aiOn = Ai.enabled();
+      const aiNow = aiOn && Date.now() - cam.lastAi > 1500;
+      const ai = aiNow ? (...args) => { cam.lastAi = Date.now(); return Ai.readTiles(...args); } : null;
+      const found = await Ocr.read(reticleCrop(video), refs, undefined, { radius: 24, maxCharH: 0.95, ai, onAiError: aiError });
       const hit = found.find((d) => d.code);
-      // Même numéro lu sur deux images de suite avant d'afficher le produit
-      const confirmed = hit && cam.lastCode === hit.code;
+      // Sans IA : même numéro lu sur deux images de suite avant d'afficher le produit
+      const confirmed = hit && (hit.ai || (!aiOn && cam.lastCode === hit.code));
       cam.lastCode = hit ? hit.code : null;
       if (confirmed && cam.stream && cam.mode === 'mouvement' && !cam.foundId) {
         cam.lastCode = null;
@@ -1057,6 +1100,28 @@ const ACT = {
     renderCam();
     startCamLoop();
   },
+  'ai-on': (el) => {
+    const s = readAiForm();
+    s.on = el.dataset.v === '1';
+    if (s.on && !s.key) toast('Ajoutez d’abord votre clé API Groq', true);
+    Ai.save(s);
+    render();
+  },
+  'ai-save': () => { Ai.save(readAiForm()); toast('Réglages IA enregistrés'); render(); },
+  'ai-test': async (el) => {
+    const s = readAiForm();
+    if (!s.key) { toast('Ajoutez d’abord votre clé API Groq', true); return; }
+    Ai.save(s);
+    el.disabled = true;
+    el.textContent = 'Test…';
+    try {
+      toast(await Ai.test() ? 'Groq répond : tout est prêt' : 'Réponse inattendue de Groq', false);
+    } catch (err) {
+      toast(err.message, true);
+    }
+    render();
+  },
+
   'cam-manual': () => {
     closeCamera();
     ui.scanMode = 'mouvement';
