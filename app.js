@@ -797,7 +797,7 @@ function submitMovement() {
 // Mouvement : lecture en continu du numéro dans le viseur, puis fiche produit par-dessus.
 // Inventaire : déclencheur → photo de l'étagère → vérification.
 
-const cam = { mode: 'mouvement', stream: null, track: null, torch: false, timer: null, busy: false, foundId: null, lastCode: null, lastAi: 0, unreadTicks: 0, aiDownUntil: 0 };
+const cam = { mode: 'mouvement', stream: null, track: null, torch: false, timer: null, busy: false, foundId: null, lastCode: null, lastAi: 0, unreadTicks: 0, aiDownUntil: 0, shooting: false };
 
 // Erreur IA : on prévient (une fois toutes les 20 s) et la lecture locale prend le relais
 let lastAiError = 0;
@@ -894,10 +894,11 @@ function renderCam() {
       </div>`;
   } else {
     bottom.innerHTML = `
-      <div class="cam-hint">Visez le <b>numéro</b> écrit sur le carton</div>
+      <div class="cam-hint">${cam.shooting ? 'Lecture…' : 'Visez le <b>numéro</b>, ou appuyez pour photographier'}</div>
       <div class="cam-row">
         <button class="cam-btn" data-act="cam-manual">Saisir</button>
-        <span></span><span></span>
+        <button class="shutter" data-act="cam-shoot-mvt" aria-label="Photographier le carton" ${cam.shooting ? 'disabled' : ''}></button>
+        <span></span>
       </div>`;
   }
 }
@@ -927,7 +928,7 @@ function reticleCrop(video) {
 
 async function camTick() {
   const video = $('cam-video');
-  if (!cam.stream || cam.mode !== 'mouvement' || cam.foundId) return;
+  if (!cam.stream || cam.mode !== 'mouvement' || cam.foundId || cam.shooting) return;
   if (video.readyState >= 2 && !cam.busy) {
     cam.busy = true;
     try {
@@ -939,7 +940,7 @@ async function camTick() {
         const localHit = cands.find((c) => c.keep && c.code);
         cam.unreadTicks = localHit ? 0 : cam.unreadTicks + 1;
         const since = Date.now() - cam.lastAi;
-        const due = localHit ? since > 1200 : cam.unreadTicks >= 4 && since > 4000;
+        const due = localHit ? since > 1200 : cam.unreadTicks >= 3 && since > 3000;
         if (!due) return cands.map(() => null);
         cam.lastAi = Date.now();
         return Ai.readTiles(canvas, cands.slice(0, 4), codes);
@@ -966,18 +967,52 @@ async function camTick() {
   startCamLoop();
 }
 
-function camShoot() {
+// Image entière de la caméra, réduite à 1600 px max.
+function grabFrame(withDisplay) {
   const video = $('cam-video');
-  if (!cam.stream || video.readyState < 2) return;
+  if (!cam.stream || video.readyState < 2) return null;
   const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
   const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   canvas.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0, w, h);
-  const prepared = { canvas, w, h, display: canvas.toDataURL('image/jpeg', 0.82) };
+  return { canvas, w, h, display: withDisplay ? canvas.toDataURL('image/jpeg', 0.82) : null };
+}
+
+function camShoot() {
+  const prepared = grabFrame(true);
+  if (!prepared) return;
   closeCamera();
   analyzeShelf(prepared);
+}
+
+// Mouvement : photo du carton, lecture complète (IA comprise), numéro le plus central retenu.
+async function camShootMvt() {
+  const frame = grabFrame(false);
+  if (!frame || cam.shooting) return;
+  cam.shooting = true;
+  clearTimeout(cam.timer);
+  renderCam();
+  try {
+    const refs = db.articles.filter((a) => a.reference).map((a) => a.reference);
+    const found = await Ocr.read(frame, refs, undefined, { ai: Ai.enabled() ? Ai.readTiles : null, onAiError: aiError });
+    const hits = found.filter((d) => d.code)
+      .sort((a, b) => Math.hypot(a.x + a.w / 2 - 0.5, a.y + a.h / 2 - 0.45) - Math.hypot(b.x + b.w / 2 - 0.5, b.y + b.h / 2 - 0.45));
+    if (hits.length && cam.stream && cam.mode === 'mouvement') {
+      cam.foundId = articleByRef(hits[0].code).id;
+      ui.mvt.articleId = cam.foundId;
+      ui.mvt.qty = 1;
+      navigator.vibrate?.(40);
+    } else if (!hits.length) {
+      toast('Aucun numéro lu : approchez-vous du carton', true);
+    }
+  } catch (err) {
+    console.error(err);
+    toast('Lecture impossible : ' + err.message, true);
+  }
+  cam.shooting = false;
+  if (cam.stream) { renderCam(); startCamLoop(); }
 }
 
 function onStageTap(ev) {
@@ -1102,6 +1137,7 @@ const ACT = {
     renderCam();
   },
   'cam-shoot': camShoot,
+  'cam-shoot-mvt': camShootMvt,
   'cam-rescan': () => { cam.foundId = null; ui.mvt.articleId = null; renderCam(); startCamLoop(); },
   'cam-submit': () => {
     if (!submitMovement()) return;

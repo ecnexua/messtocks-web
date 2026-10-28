@@ -66,8 +66,12 @@
     }
   }
 
-  // Masque "encre" par seuillage local (moyenne sur une fenêtre, via image intégrale).
-  function inkMask(canvas, radius, k = THRESHOLD_K) {
+  // Niveaux de gris + moyennes locales (via image intégrale), calculés une fois par image
+  // et partagés par les deux passages.
+  const localCache = new WeakMap();
+  function localMeans(canvas, radius) {
+    const cached = localCache.get(canvas);
+    if (cached && cached.radius === radius) return cached;
     const w = canvas.width, h = canvas.height;
     const px = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
     const gray = new Float32Array(w * h);
@@ -83,15 +87,25 @@
       }
     }
     const r = radius || Math.max(8, Math.round(Math.max(w, h) / 40));
-    const ink = new Uint8Array(w * h);
+    const mean = new Float32Array(w * h);
     for (let y = 0; y < h; y++) {
       const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
       for (let x = 0; x < w; x++) {
         const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
-        const mean = (integral[y1 * W + x1] - integral[y0 * W + x1] - integral[y1 * W + x0] + integral[y0 * W + x0]) / ((x1 - x0) * (y1 - y0));
-        ink[y * w + x] = gray[y * w + x] < mean * (1 - k) ? 1 : 0;
+        mean[y * w + x] = (integral[y1 * W + x1] - integral[y0 * W + x1] - integral[y1 * W + x0] + integral[y0 * W + x0]) / ((x1 - x0) * (y1 - y0));
       }
     }
+    const result = { gray, mean, radius };
+    localCache.set(canvas, result);
+    return result;
+  }
+
+  // Masque "encre" : pixel plus sombre que son voisinage d'au moins k (seuillage local).
+  function inkMask(canvas, radius, k = THRESHOLD_K) {
+    const { gray, mean } = localMeans(canvas, radius);
+    const ink = new Uint8Array(gray.length);
+    const f = 1 - k;
+    for (let i = 0; i < gray.length; i++) ink[i] = gray[i] < mean[i] * f ? 1 : 0;
     return { ink, gray };
   }
 
@@ -111,7 +125,7 @@
     }
     if (!nb || !nf) return false;
     const mean = bg / nb, std = Math.sqrt(Math.max(0, bg2 / nb - mean * mean));
-    return mean >= 100 && mean - fg / nf >= 40 && std <= 45;
+    return mean >= 100 && mean - fg / nf >= 25 && std <= 45;
   }
 
   // ------------------------------------------------------------ segmentation
@@ -142,10 +156,13 @@
       comps.push({ id, x: minx, y: miny, w: maxx - minx + 1, h: maxy - miny + 1, n });
     }
 
-    const chars = comps.slice(1).filter((c) => {
+    const isChar = (c) => {
       const ratio = c.w / c.h, fill = c.n / (c.w * c.h);
       return c.h > h * 0.012 && c.h < h * maxCharH && ratio > 0.08 && ratio < 2.2 && fill > 0.03 && fill < 0.9;
-    }).sort((a, b) => a.x - b.x);
+    };
+    const chars = comps.slice(1).filter(isChar).sort((a, b) => a.x - b.x);
+    // Traits horizontaux isolés : souvent la base d'un 2 (stylo levé), rattachés plus bas
+    const strokes = comps.slice(1).filter((c) => !isChar(c) && c.w / c.h >= 1.6 && c.n >= 8 && c.w < w * 0.5);
 
     // Deux caractères voisins, de même taille et sur la même ligne = même numéro
     const parent = chars.map((_, i) => i);
@@ -177,8 +194,22 @@
           glyphs.push({ x: c.x, y: c.y, w: c.w, h: c.h, ids: [c.id] });
         }
       });
-      const x0 = Math.min(...g.map((c) => c.x)), y0 = Math.min(...g.map((c) => c.y));
-      const x1 = Math.max(...g.map((c) => c.x + c.w)), y1 = Math.max(...g.map((c) => c.y + c.h));
+      // Trait horizontal qui part du bas d'un caractère = partie de ce caractère
+      glyphs.forEach((gl) => {
+        strokes.forEach((s) => {
+          if (s.used || s.h > 0.6 * gl.h) return;
+          const top = s.y + s.h / 2;
+          if (top < gl.y + 0.55 * gl.h || top > gl.y + 1.15 * gl.h) return;
+          if (s.x < gl.x - 0.3 * gl.w || s.x > gl.x + 0.9 * gl.w) return;
+          s.used = true;
+          const x1 = Math.max(gl.x + gl.w, s.x + s.w), y1 = Math.max(gl.y + gl.h, s.y + s.h);
+          gl.x = Math.min(gl.x, s.x); gl.y = Math.min(gl.y, s.y);
+          gl.w = x1 - gl.x; gl.h = y1 - gl.y;
+          gl.ids.push(s.id);
+        });
+      });
+      const x0 = Math.min(...glyphs.map((c) => c.x)), y0 = Math.min(...glyphs.map((c) => c.y));
+      const x1 = Math.max(...glyphs.map((c) => c.x + c.w)), y1 = Math.max(...glyphs.map((c) => c.y + c.h));
       return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, glyphs };
     }).filter((g) => g.glyphs.length <= 6).map((g) => ({ ...g, label }));
   }
@@ -286,11 +317,19 @@
     const chars = new Set('0123456789');
     codes.forEach((c) => [...c].forEach((ch) => chars.add(ch)));
 
-    const [worker, model] = await Promise.all([getWorker(onProgress), getModel()]);
-    await worker.setParameters({
-      tessedit_char_whitelist: [...chars].join(''),
-      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
-    });
+    const model = await getModel();
+    // Tesseract (lourd à démarrer sur téléphone) seulement s'il sert : réseau pas encore
+    // chargé, ou N° carton contenant des lettres
+    const useTess = !model || [...chars].some((c) => !/[0-9]/.test(c));
+    let tessReady = null;
+    const tess = () => tessReady || (tessReady = getWorker(onProgress).then(async (worker) => {
+      await worker.setParameters({
+        tessedit_char_whitelist: [...chars].join(''),
+        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
+      });
+      return worker;
+    }));
+    const worker = useTess ? tess : null;
 
     // Deux passages (feutre / stylo fin), puis fusion : une lecture par emplacement
     const { w, h } = prepared;
@@ -367,8 +406,8 @@
       // Second avis : Tesseract sur le numéro entier
       let tessText = '', tessCode = null;
       const sure = best && bestScore > 0.8 && bestScore > 4 * second;
-      if (!sure && !opts.ai) {
-        const { data } = await worker.recognize(cropNumber(ink, w, h, g));
+      if (!sure && !opts.ai && worker) {
+        const { data } = await (await worker()).recognize(cropNumber(ink, w, h, g));
         if (data.confidence >= TESS_MIN_CONF) {
           tessText = normalize(data.text);
           tessCode = tessText ? matchTesseract(tessText, codes) : null;
