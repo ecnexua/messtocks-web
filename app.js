@@ -797,7 +797,7 @@ function submitMovement() {
 // Mouvement : lecture en continu du numéro dans le viseur, puis fiche produit par-dessus.
 // Inventaire : déclencheur → photo de l'étagère → vérification.
 
-const cam = { mode: 'mouvement', stream: null, track: null, torch: false, timer: null, busy: false, foundId: null, lastCode: null, lastAi: 0 };
+const cam = { mode: 'mouvement', stream: null, track: null, torch: false, timer: null, busy: false, foundId: null, lastCode: null, lastAi: 0, unreadTicks: 0, aiDownUntil: 0 };
 
 // Erreur IA : on prévient (une fois toutes les 20 s) et la lecture locale prend le relais
 let lastAiError = 0;
@@ -932,13 +932,22 @@ async function camTick() {
     cam.busy = true;
     try {
       const refs = db.articles.filter((a) => a.reference).map((a) => a.reference);
-      // IA activée : elle relit le viseur au plus toutes les 1,5 s, et c'est elle qui confirme
-      const aiOn = Ai.enabled();
-      const aiNow = aiOn && Date.now() - cam.lastAi > 1500;
-      const ai = aiNow ? (...args) => { cam.lastAi = Date.now(); return Ai.readTiles(...args); } : null;
-      const found = await Ocr.read(reticleCrop(video), refs, undefined, { radius: 24, maxCharH: 0.95, ai, onAiError: aiError });
+      // IA activée (quota Groq limité) : on ne l'appelle que pour confirmer un numéro lu
+      // localement, ou quand des zones restent illisibles plusieurs images de suite.
+      const aiOn = Ai.enabled() && Date.now() > cam.aiDownUntil;
+      const ai = aiOn ? async (canvas, cands, codes) => {
+        const localHit = cands.find((c) => c.keep && c.code);
+        cam.unreadTicks = localHit ? 0 : cam.unreadTicks + 1;
+        const since = Date.now() - cam.lastAi;
+        const due = localHit ? since > 1200 : cam.unreadTicks >= 4 && since > 4000;
+        if (!due) return cands.map(() => null);
+        cam.lastAi = Date.now();
+        return Ai.readTiles(canvas, cands.slice(0, 4), codes);
+      } : null;
+      const onAiError = (err) => { cam.aiDownUntil = Date.now() + 30000; aiError(err); };
+      const found = await Ocr.read(reticleCrop(video), refs, undefined, { radius: 24, maxCharH: 0.95, ai, onAiError });
       const hit = found.find((d) => d.code);
-      // Sans IA : même numéro lu sur deux images de suite avant d'afficher le produit
+      // Sans IA (ou IA indisponible) : même numéro lu sur deux images de suite
       const confirmed = hit && (hit.ai || (!aiOn && cam.lastCode === hit.code));
       cam.lastCode = hit ? hit.code : null;
       if (confirmed && cam.stream && cam.mode === 'mouvement' && !cam.foundId) {

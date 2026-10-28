@@ -63,7 +63,7 @@
 
   // Mosaïque : une tuile par zone repérée, avec un bandeau numéroté au-dessus.
   function mosaic(canvas, boxes) {
-    const COLS = Math.min(4, boxes.length), TW = 256, TH = 160, HEAD = 26;
+    const COLS = Math.min(4, boxes.length), TW = 176, TH = 112, HEAD = 20;
     const rows = Math.ceil(boxes.length / COLS);
     const out = document.createElement('canvas');
     out.width = COLS * TW;
@@ -76,9 +76,9 @@
       x.fillStyle = '#111111';
       x.fillRect(tx, ty, TW, HEAD);
       x.fillStyle = '#ffffff';
-      x.font = 'bold 16px sans-serif';
+      x.font = 'bold 13px sans-serif';
       x.textBaseline = 'middle';
-      x.fillText(`TILE ${i + 1}`, tx + 8, ty + HEAD / 2);
+      x.fillText(`TILE ${i + 1}`, tx + 6, ty + HEAD / 2);
       // zone repérée + marge, en pixels de l'image
       const bw = b.w * canvas.width, bh = b.h * canvas.height;
       const m = Math.max(bh, bw * 0.25) * 0.45;
@@ -112,7 +112,7 @@ Answer only with JSON: {"tiles": [{"tile": 1, "number": "12"}, {"tile": 2, "numb
       const text = await call([
         { type: 'text', text: prompt },
         { type: 'image_url', image_url: { url: mosaic(canvas, chunk) } },
-      ], 1500);
+      ], 60 + chunk.length * 20); // réponse courte : Groq décompte la longueur réservée du quota
       const data = parseJson(text);
       const list = Array.isArray(data.tiles) ? data.tiles : [];
       return chunk.map((_, k) => {
