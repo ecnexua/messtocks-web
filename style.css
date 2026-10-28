@@ -481,3 +481,8 @@ button { touch-action: manipulation; -webkit-user-select: none; user-select: non
   transform: scale(0.95); opacity: 0.8; transition: transform 0.05s, opacity 0.05s;
 }
 .shutter:active:not(:disabled) { transform: scale(0.9); }
+
+/* compteur compact (panneau étiquettes) */
+.stepper.mini { display: grid; grid-template-columns: 34px 52px 34px; gap: 4px; align-items: center; }
+.stepper.mini .btn { width: 34px; height: 34px; font-size: 16px; }
+.stepper.mini input { height: 34px; font-size: 18px; padding: 2px; }

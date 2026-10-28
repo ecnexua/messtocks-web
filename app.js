@@ -130,6 +130,7 @@ const ui = {
   search: { q: '', cat: '', sous: '', marque: '', type: 'tous' },
   hist: { type: 'tous', user: '', periode: 'toutes' },
   scanMode: 'mouvement',
+  labels: { format: '8', type: 'qr', start: 1, cut: true, counts: {} },
   mvt: { type: 'S', articleId: null, qty: 1, userId: '', q: '' },
   shelf: null,           // { img, detections, depths, nom }
   photoPurpose: null,    // 'shelf' | 'mvt'
@@ -456,7 +457,10 @@ function viewProduits() {
   return `
     <div class="page-title">PRODUITS</div>
     <div class="kpis">${kinds.map(([k, d]) => kpi(d.label, db[k].length)).join('')}</div>
-    <button class="btn big primary" data-act="new-article" style="margin-bottom:6px">+ Nouveau produit</button>
+    <div class="btn-row" style="margin:0 0 6px">
+      <button class="btn big primary" data-act="new-article">+ Nouveau produit</button>
+      <button class="btn big" data-act="labels-open">Imprimer des étiquettes</button>
+    </div>
     <div class="cols">${kinds.map(([k, d], i) => `
       <section class="card">
         <h2><i>${String(i + 1).padStart(2, '0')}</i> ${d.label} <span class="count">${db[k].length}</span></h2>
@@ -628,6 +632,7 @@ function openArticle(id) {
         ${id ? '<button class="btn danger" data-act="article-delete">Supprimer</button>' : ''}
         <button class="btn primary" data-act="article-save">Enregistrer</button>
       </div>
+      ${id && a.reference ? `<button class="btn big" data-act="labels-open" data-id="${id}" style="margin-top:10px">Imprimer des étiquettes</button>` : ''}
     </section>
     ${id ? `<section class="card">
       <h2><i>H</i> Derniers mouvements</h2>
@@ -720,6 +725,87 @@ function deleteData() {
   render();
 }
 
+// ---- Étiquettes à imprimer (PDF A4)
+
+function openLabels(preselectId) {
+  if (preselectId) ui.labels.counts = { [preselectId]: Math.max(1, ui.labels.counts[preselectId] || 0) };
+  sheetCtx = { kind: 'labels' };
+  renderLabels();
+}
+
+function renderLabels() {
+  const L = ui.labels;
+  const f = Labels.FORMATS[L.format];
+  const perPage = f.cols * f.rows;
+  L.start = Math.min(Math.max(1, L.start), perPage);
+  const withRef = db.articles.filter((a) => a.reference).sort((a, b) => sortNum(a.reference, b.reference));
+  const total = withRef.reduce((s, a) => s + (L.counts[a.id] || 0), 0);
+  const pages = total ? Math.ceil((total + L.start - 1) / perPage) : 0;
+  openSheet(`
+    ${sheetHead('ET', 'Étiquettes à imprimer')}
+    <section class="card">
+      <label class="field"><span>Format A4</span>
+        <select data-lbl="format">${Object.entries(Labels.FORMATS).map(([k, v]) => `<option value="${k}"${k === L.format ? ' selected' : ''}>${v.label}</option>`).join('')}</select></label>
+      <div class="field"><span>Type de code</span>
+        <div class="seg full">
+          <button data-act="lbl-type" data-v="qr" class="${L.type === 'qr' ? 'on' : ''}">QR code (conseillé)</button>
+          <button data-act="lbl-type" data-v="code128" class="${L.type === 'code128' ? 'on' : ''}">Code-barres</button>
+        </div></div>
+      <div class="field-row">
+        <label class="field"><span>Première étiquette</span>
+          <input type="number" min="1" max="${perPage}" inputmode="numeric" data-lbl="start" value="${L.start}"></label>
+        <div class="field"><span>Traits de découpe</span>
+          <div class="seg full">
+            <button data-act="lbl-cut" data-v="1" class="${L.cut ? 'on' : ''}">Oui</button>
+            <button data-act="lbl-cut" data-v="0" class="${L.cut ? '' : 'on'}">Non</button>
+          </div></div>
+      </div>
+      <p class="hint">Grandes étiquettes (8 par page) : lisibles sur une photo d’étagère de 2 à 2,5 m de large. Plus petites : rapprochez-vous. « Première étiquette » sert à réutiliser une planche autocollante entamée. Traits de découpe : pour du papier normal.</p>
+    </section>
+    <section class="card">
+      <h2><i>P</i> Produits <span class="count">${total} étiq.</span></h2>
+      <div class="btn-row" style="margin:0 0 8px">
+        <button class="btn small" data-act="lbl-all">Tous × 1</button>
+        <button class="btn small" data-act="lbl-none">Tout à 0</button>
+      </div>
+      <ul class="list">${withRef.map((a) => `<li>
+        <span class="num">${esc(a.reference)}</span>
+        <span class="grow"><b>${esc(a.nom)}</b></span>
+        <span class="stepper mini">
+          <button class="btn" data-act="lbl-step" data-id="${a.id}" data-d="-1">−</button>
+          <input type="number" min="0" inputmode="numeric" data-lbl="count" data-id="${a.id}" value="${L.counts[a.id] || 0}">
+          <button class="btn" data-act="lbl-step" data-id="${a.id}" data-d="1">+</button>
+        </span></li>`).join('') || '<li class="empty">Aucun produit avec un N° carton</li>'}</ul>
+      ${db.articles.length > withRef.length ? `<p class="hint">${db.articles.length - withRef.length} produit(s) sans N° carton : ajoutez-le dans leur fiche pour imprimer leur étiquette.</p>` : ''}
+    </section>
+    <button class="btn big primary" data-act="lbl-pdf" ${total ? '' : 'disabled'}>Créer le PDF · ${total} étiquette${total > 1 ? 's' : ''} · ${pages} page${pages > 1 ? 's' : ''}</button>`);
+}
+
+async function makeLabelsPdf(btn) {
+  const L = ui.labels;
+  const items = db.articles.filter((a) => a.reference && L.counts[a.id] > 0)
+    .sort((a, b) => sortNum(a.reference, b.reference))
+    .map((article) => ({ article, count: L.counts[article.id] }));
+  if (!items.length) return;
+  btn.disabled = true;
+  btn.textContent = 'Création du PDF…';
+  try {
+    const blob = await Labels.pdf({ items, format: L.format, type: L.type, start: L.start, cut: L.cut });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `etiquettes-${today()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    toast('PDF créé : ouvrez-le pour l’imprimer');
+  } catch (err) {
+    console.error(err);
+    toast('PDF impossible : ' + err.message, true);
+  }
+  renderLabels();
+}
+
 // Choix d'un article ayant un numéro (scan d'étagère, lecture de numéro)
 function pickArticle(title, list, callback, nullLabel) {
   sheetCtx = { kind: 'pick', callback };
@@ -746,11 +832,19 @@ async function analyzeShelf(source) {
   render();
   try {
     const prepared = source instanceof Blob ? await Ocr.prepare(source) : source;
-    const found = await Ocr.read(prepared, refs.map((a) => a.reference), (p, text) => {
+    const progress = (p, text) => {
       ui.ocr = { p, text };
       const bar = $('ocr-bar');
       if (bar) { bar.style.width = Math.round(p * 100) + '%'; $('ocr-text').textContent = text + '…'; }
-    }, { ai: Ai.enabled() ? Ai.readTiles : null, onAiError: aiError });
+    };
+    // 1. Étiquettes imprimées (QR / code-barres), lues en pleine résolution
+    progress(0.1, 'Lecture des étiquettes');
+    const codes = new Set(refs.map((a) => a.reference));
+    const tags = await Codes.read(source instanceof Blob ? source : (source.full || prepared.canvas)).catch((err) => { console.warn(err); return []; });
+    // 2. Sans étiquette : lecture des chiffres écrits (et IA si activée)
+    const found = tags.length
+      ? tags.map((t) => ({ ...t, raw: t.code, code: codes.has(t.code) ? t.code : null, tag: true }))
+      : await Ocr.read(prepared, [...codes], progress, { ai: Ai.enabled() ? Ai.readTiles : null, onAiError: aiError });
     ui.ocr = null;
     const depths = {};
     refs.forEach((a) => { depths[a.reference] = a.profondeur || 1; });
@@ -933,34 +1027,13 @@ async function camTick() {
   if (video.readyState >= 2 && !cam.busy) {
     cam.busy = true;
     try {
-      const refs = db.articles.filter((a) => a.reference).map((a) => a.reference);
-      // IA activée (quota Groq limité) : on ne l'appelle que pour confirmer un numéro lu
-      // localement, ou quand des zones restent illisibles plusieurs images de suite.
-      const aiOn = Ai.enabled() && Date.now() > cam.aiDownUntil;
-      const ai = aiOn ? async (canvas, cands, codes) => {
-        const localHit = cands.find((c) => c.keep && c.code);
-        cam.unreadTicks = localHit ? 0 : cam.unreadTicks + 1;
-        const since = Date.now() - cam.lastAi;
-        const due = localHit ? since > 1200 : cam.unreadTicks >= 3 && since > 3000;
-        if (!due) return cands.map(() => null);
-        cam.lastAi = Date.now();
-        return Ai.readTiles(canvas, cands.slice(0, 4), codes);
-      } : null;
-      const onAiError = (err) => { cam.aiDownUntil = Date.now() + 30000; aiError(err); };
-      const crop = reticleCrop(video);
-      const found = await Ocr.read(crop, refs, undefined, { radius: Math.round(crop.w / 26), maxCharH: 0.95, maxGroups: 6, ai, onAiError });
-      const hit = found.find((d) => d.code);
-      // Sans IA (ou IA indisponible) : même numéro lu sur deux images de suite
-      const confirmed = hit && (hit.ai || (!aiOn && cam.lastCode === hit.code));
-      cam.lastCode = hit ? hit.code : null;
-      if (confirmed && cam.stream && cam.mode === 'mouvement' && !cam.foundId) {
-        cam.lastCode = null;
-        cam.foundId = articleByRef(hit.code).id;
-        ui.mvt.articleId = cam.foundId;
-        ui.mvt.qty = 1;
-        navigator.vibrate?.(40);
-        renderCam();
-      }
+      // 1. Étiquette imprimée (QR / code-barres) : lecture sûre, produit affiché tout de suite
+      const frame = grabFrame(false, 1280);
+      const tags = frame ? await Codes.read(frame.canvas).catch(() => []) : [];
+      const tag = tags.filter((t) => articleByRef(t.code)).sort(byCenter)[0];
+      if (tag && cam.stream && cam.mode === 'mouvement' && !cam.foundId) {
+        showCamProduct(tag.code);
+      } else await camTickDigits();
     } catch (err) {
       console.error(err);
     }
@@ -969,11 +1042,48 @@ async function camTick() {
   startCamLoop();
 }
 
-// Image entière de la caméra, réduite à 1600 px max.
-function grabFrame(withDisplay) {
+const byCenter = (a, b) => Math.hypot(a.x + a.w / 2 - 0.5, a.y + a.h / 2 - 0.45) - Math.hypot(b.x + b.w / 2 - 0.5, b.y + b.h / 2 - 0.45);
+
+function showCamProduct(code) {
+  cam.lastCode = null;
+  cam.foundId = articleByRef(code).id;
+  ui.mvt.articleId = cam.foundId;
+  ui.mvt.qty = 1;
+  navigator.vibrate?.(40);
+  renderCam();
+}
+
+// 2. Sans étiquette : lecture des chiffres écrits dans le viseur
+async function camTickDigits() {
+  const video = $('cam-video');
+  const refs = db.articles.filter((a) => a.reference).map((a) => a.reference);
+  // IA activée (quota Groq limité) : on ne l'appelle que pour confirmer un numéro lu
+  // localement, ou quand des zones restent illisibles plusieurs images de suite.
+  const aiOn = Ai.enabled() && Date.now() > cam.aiDownUntil;
+  const ai = aiOn ? async (canvas, cands, codes) => {
+    const localHit = cands.find((c) => c.keep && c.code);
+    cam.unreadTicks = localHit ? 0 : cam.unreadTicks + 1;
+    const since = Date.now() - cam.lastAi;
+    const due = localHit ? since > 1200 : cam.unreadTicks >= 3 && since > 3000;
+    if (!due) return cands.map(() => null);
+    cam.lastAi = Date.now();
+    return Ai.readTiles(canvas, cands.slice(0, 4), codes);
+  } : null;
+  const onAiError = (err) => { cam.aiDownUntil = Date.now() + 30000; aiError(err); };
+  const crop = reticleCrop(video);
+  const found = await Ocr.read(crop, refs, undefined, { radius: Math.round(crop.w / 26), maxCharH: 0.95, maxGroups: 6, ai, onAiError });
+  const hit = found.find((d) => d.code);
+  // Sans IA (ou IA indisponible) : même numéro lu sur deux images de suite
+  const confirmed = hit && (hit.ai || (!aiOn && cam.lastCode === hit.code));
+  cam.lastCode = hit ? hit.code : null;
+  if (confirmed && cam.stream && cam.mode === 'mouvement' && !cam.foundId) showCamProduct(hit.code);
+}
+
+// Image entière de la caméra, réduite à maxSide px.
+function grabFrame(withDisplay, maxSide = 1600) {
   const video = $('cam-video');
   if (!cam.stream || video.readyState < 2) return null;
-  const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+  const scale = Math.min(1, maxSide / Math.max(video.videoWidth, video.videoHeight));
   const w = Math.round(video.videoWidth * scale), h = Math.round(video.videoHeight * scale);
   const canvas = document.createElement('canvas');
   canvas.width = w;
@@ -985,6 +1095,7 @@ function grabFrame(withDisplay) {
 function camShoot() {
   const prepared = grabFrame(true);
   if (!prepared) return;
+  prepared.full = grabFrame(false, 4096).canvas; // pleine résolution pour les étiquettes
   closeCamera();
   analyzeShelf(prepared);
 }
@@ -998,9 +1109,11 @@ async function camShootMvt() {
   renderCam();
   try {
     const refs = db.articles.filter((a) => a.reference).map((a) => a.reference);
-    const found = await Ocr.read(frame, refs, undefined, { ai: Ai.enabled() ? Ai.readTiles : null, onAiError: aiError });
-    const hits = found.filter((d) => d.code)
-      .sort((a, b) => Math.hypot(a.x + a.w / 2 - 0.5, a.y + a.h / 2 - 0.45) - Math.hypot(b.x + b.w / 2 - 0.5, b.y + b.h / 2 - 0.45));
+    // étiquettes imprimées d'abord, sinon chiffres écrits (et IA si activée)
+    const full = grabFrame(false, 4096);
+    let found = (await Codes.read(full ? full.canvas : frame.canvas).catch(() => [])).filter((t) => articleByRef(t.code));
+    if (!found.length) found = await Ocr.read(frame, refs, undefined, { ai: Ai.enabled() ? Ai.readTiles : null, onAiError: aiError });
+    const hits = found.filter((d) => d.code).sort(byCenter);
     if (hits.length && cam.stream && cam.mode === 'mouvement') {
       cam.foundId = articleByRef(hits[0].code).id;
       ui.mvt.articleId = cam.foundId;
@@ -1112,6 +1225,18 @@ const ACT = {
   'edit-data': (el) => openData(el.dataset.kind, el.dataset.id || null),
   'data-save': saveData,
   'data-delete': deleteData,
+
+  'labels-open': (el) => { if (sheetCtx) closeSheet(); openLabels(el.dataset.id || null); },
+  'lbl-type': (el) => { ui.labels.type = el.dataset.v; renderLabels(); },
+  'lbl-cut': (el) => { ui.labels.cut = el.dataset.v === '1'; renderLabels(); },
+  'lbl-all': () => { db.articles.forEach((a) => { if (a.reference) ui.labels.counts[a.id] = 1; }); renderLabels(); },
+  'lbl-none': () => { ui.labels.counts = {}; renderLabels(); },
+  'lbl-step': (el) => {
+    const c = ui.labels.counts;
+    c[el.dataset.id] = Math.max(0, (c[el.dataset.id] || 0) + int(el.dataset.d, -1));
+    renderLabels();
+  },
+  'lbl-pdf': (el) => makeLabelsPdf(el),
 
   'sheet-close': closeSheet,
   'sheet-backdrop': (el, ev) => { if (ev.target === el) closeSheet(); },
@@ -1296,6 +1421,14 @@ document.addEventListener('input', (ev) => {
 document.addEventListener('change', (ev) => {
   const el = ev.target;
   if (el.dataset.bind === 'mvt.qty') { render(); if (camOpen()) renderCam(); }
+  // Panneau étiquettes
+  if (el.dataset.lbl) {
+    const L = ui.labels;
+    if (el.dataset.lbl === 'format') L.format = el.value;
+    if (el.dataset.lbl === 'start') L.start = int(el.value, 1);
+    if (el.dataset.lbl === 'count') L.counts[el.dataset.id] = int(el.value, 0);
+    renderLabels();
+  }
   if (el.dataset.actChange === 'depth') {
     ui.shelf.depths[el.dataset.code] = int(el.value, 1);
     render();
