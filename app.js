@@ -503,7 +503,7 @@ function viewParams() {
         </div>
       </section>
     </div>
-    <p class="hint" style="text-align:center;margin-top:16px">D’après MesStocks de Christophe Garcia · Interface Font Lab</p>`;
+    <p class="hint" style="text-align:center;margin-top:16px">Version 1.2 · D’après MesStocks de Christophe Garcia · Interface Font Lab</p>`;
 }
 
 // ---- Historique
