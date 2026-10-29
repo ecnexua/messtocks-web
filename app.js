@@ -57,12 +57,13 @@ function demoData() {
     ],
     evenements: [{ id: 'e1', objet: 'D', nomObjet: 'Données de démonstration', type: 'A', date: ago(240) }],
     inventaire: { etageres: [] },
-    params: { theme: 'auto' },
+    inventaires: [],
+    params: { theme: 'auto', site: '' },
   };
 }
 
 function emptyData() {
-  return { categories: [], sousCategories: [], marques: [], utilisateurs: [], articles: [], historique: [], evenements: [], inventaire: { etageres: [] }, params: { theme: 'auto' } };
+  return { categories: [], sousCategories: [], marques: [], utilisateurs: [], articles: [], historique: [], evenements: [], inventaire: { etageres: [] }, inventaires: [], params: { theme: 'auto', site: '' } };
 }
 
 function load() {
@@ -179,7 +180,7 @@ function articleRow(a) {
   return `<li data-act="open-article" data-id="${a.id}">
     <span class="num${a.reference ? '' : ' none'}">${esc(a.reference || '··')}</span>
     <span class="grow"><b>${esc(a.nom)}</b><small>${esc(nomOf(db.marques, a.idMarque))} · ${esc(nomOf(db.sousCategories, a.idSousCategorie))}</small></span>
-    <span class="stock${low ? ' low' : ''}">${a.stocks}<small>MIN ${a.stocksMini}</small></span>
+    <span class="stock${low ? ' low' : ''}">${a.stocks}<small>${low ? `Commander ${qtyToOrder(a)}` : `Mini ${a.stocksMini}`}</small></span>
   </li>`;
 }
 
@@ -188,43 +189,49 @@ function articleRow(a) {
 function viewRecap() {
   const week = Date.now() - 7 * 864e5;
   const mvts = db.historique.filter((h) => new Date(h.date) >= week).length;
-  const low = db.articles.filter(aCommander);
+  const low = db.articles.filter(aCommander).sort((x, y) => qtyToOrder(y) - qtyToOrder(x));
   const totalUnits = db.articles.reduce((s, a) => s + a.stocks, 0);
   const recent = [...db.historique].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-
-  const sousRows = db.sousCategories.map((sc) => {
-    const arts = db.articles.filter((a) => a.idSousCategorie === sc.id);
-    const n = arts.filter(aCommander).length;
-    return { sc, total: arts.length, n };
-  }).filter((r) => r.total).sort((a, b) => b.n - a.n || a.sc.nom.localeCompare(b.sc.nom));
+  const lastInv = db.inventaires[db.inventaires.length - 1];
+  const day = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return `
-    <div class="page-title">RÉCAP'<small>${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</small></div>
+    <div class="page-title">RÉCAP'<small>${esc([siteName(), day].filter(Boolean).join(' · '))}</small></div>
     <div class="kpis">
-      ${kpi('Produits', db.articles.length, { act: 'tab', data: ' data-tab="recherche"' })}
+      ${kpi('Produits suivis', db.articles.length, { act: 'tab', data: ' data-tab="recherche"' })}
       ${kpi('À commander', low.length, { alert: low.length > 0, act: 'search-low' })}
-      ${kpi('Unités en stock', totalUnits)}
-      ${kpi('Mouvements 7 j', mvts, { act: 'page', data: ' data-page="historique"' })}
+      ${kpi('Cartons en stock', totalUnits)}
+      ${kpi('Mouvements sur 7 jours', mvts, { act: 'page', data: ' data-page="historique"' })}
     </div>
+    <section class="card export-card">
+      <div class="grow"><b>Fichier Excel</b><small>Stocks, à commander, mouvements et inventaires dans un seul classeur.</small></div>
+      <button class="btn primary" data-act="export-xlsx">Télécharger</button>
+    </section>
     <div class="cols">
       <section class="card">
-        <h2><i>A</i> Sous-catégories <span class="count">${sousRows.length}</span></h2>
-        <ul class="list">${sousRows.map(({ sc, total, n }) => `
-          <li data-act="search-sous" data-id="${sc.id}">
-            <span class="grow"><b>${esc(sc.nom)}</b><small>${esc(nomOf(db.categories, sc.idCategorie))} · ${total} produit${total > 1 ? 's' : ''}</small></span>
-            ${n ? `<span class="pill accent">${n} à commander</span>` : '<span class="pill">À jour</span>'}
-          </li>`).join('') || '<li class="empty">Aucune sous-catégorie</li>'}
+        <h2>À commander <span class="count">${low.length}</span></h2>
+        <ul class="list">${low.slice(0, 6).map((a) => `
+          <li data-act="open-article" data-id="${a.id}">
+            <span class="num${a.reference ? '' : ' none'}">${esc(a.reference || '··')}</span>
+            <span class="grow"><b>${esc(a.nom)}</b><small>Stock ${a.stocks} · mini ${a.stocksMini}</small></span>
+            <span class="pill accent">+${qtyToOrder(a)}</span>
+          </li>`).join('') || '<li class="empty">Tous les produits sont au-dessus du stock mini</li>'}
         </ul>
+        ${low.length > 6 ? `<div class="btn-row"><button class="btn ghost" data-act="search-low">Voir les ${low.length} produits →</button></div>` : ''}
       </section>
       <section class="card">
-        <h2><i>B</i> Derniers mouvements</h2>
+        <h2>Derniers mouvements</h2>
         <ul class="list">${recent.map(movementRow).join('') || '<li class="empty">Aucun mouvement</li>'}</ul>
         <div class="btn-row">
-          <button class="btn ghost" data-act="page" data-page="historique">Historique →</button>
-          <button class="btn ghost" data-act="page" data-page="evenements">Évènements →</button>
+          <button class="btn ghost" data-act="page" data-page="historique">Tout l’historique →</button>
+          <button class="btn ghost" data-act="page" data-page="evenements">Journal des modifications →</button>
         </div>
       </section>
-    </div>`;
+    </div>
+    ${lastInv ? `<section class="card export-card">
+      <div class="grow"><b>Dernier inventaire · ${fmtDateLong(lastInv.date)}</b><small>${lastInv.lignes.length} produits comptés · ${lastInv.lignes.filter((l) => l.ecart).length} écart(s)</small></div>
+      <button class="btn" data-act="export-xlsx" data-id="${lastInv.id}">Rapport Excel</button>
+    </section>` : ''}`;
 }
 
 // ---- 02 Rechercher
@@ -245,7 +252,7 @@ function filteredArticles() {
 
 function resultsHtml() {
   const list = filteredArticles();
-  return `<h2><i>R</i> Résultats <span class="count">${list.length}</span></h2>
+  return `<h2>Produits <span class="count">${list.length}</span></h2>
     <ul class="list">${list.map(articleRow).join('') || '<li class="empty">Aucun produit</li>'}</ul>`;
 }
 
@@ -257,16 +264,19 @@ function viewRecherche() {
   const sous = db.sousCategories.filter((sc) => !s.cat || sc.idCategorie === s.cat);
   const seg = [['tous', 'Tous'], ['commander', 'À commander'], ['ajour', 'À jour']];
   return `
-    <div class="page-title">STOCKS</div>
-    <div class="search"><input id="q" data-bind="search.q" value="${esc(s.q)}" placeholder="Nom ou numéro" autocomplete="off" enterkeyhint="search"></div>
+    <div class="page-title">STOCKS<small>Quantités en cartons · touchez un produit pour l’ouvrir</small></div>
+    <div class="search"><input id="q" data-bind="search.q" value="${esc(s.q)}" placeholder="Chercher un nom ou un N° carton" autocomplete="off" enterkeyhint="search"></div>
     <div class="filters">
       <select data-bind="search.cat">${options(db.categories, s.cat, 'Catégorie')}</select>
-      <select data-bind="search.sous">${options(sous, s.sous, 'Sous-cat.')}</select>
+      <select data-bind="search.sous">${options(sous, s.sous, 'Sous-catégorie')}</select>
       <select data-bind="search.marque">${options(db.marques, s.marque, 'Marque')}</select>
     </div>
     <div class="seg full" style="margin-bottom:6px">${seg.map(([k, l]) => `<button data-act="search-type" data-v="${k}" class="${s.type === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <section class="card" id="results">${resultsHtml()}</section>
-    <button class="btn big primary" data-act="new-article">+ Nouveau produit</button>`;
+    <div class="btn-row">
+      <button class="btn big primary" data-act="new-article">+ Nouveau produit</button>
+      <button class="btn big" data-act="export-xlsx">Exporter en Excel</button>
+    </div>`;
 }
 
 // ---- 03 Scan
@@ -370,7 +380,7 @@ function scanInventaire() {
   }
 
   html += `<section class="card">
-    <h2><i>1</i> Étagère</h2>
+    <h2><i>1</i> Photographier une étagère</h2>
     <label class="field"><span>Nom de l’étagère</span><input data-bind="shelfName" value="${esc(ui.shelfName || '')}" placeholder="ex. A-03" autocomplete="off"></label>
     <div class="btn-row" style="margin-top:0">
       <button class="btn big accent" data-act="cam-open" data-mode="inventaire" ${refs.length ? '' : 'disabled'}>Ouvrir la caméra</button>
@@ -384,7 +394,7 @@ function scanInventaire() {
     const codes = Object.keys(items).sort(sortNum);
     const total = codes.reduce((s, c) => s + items[c].total, 0);
     html += `<section class="card">
-      <h2><i>2</i> Vérification <span class="count">${ui.shelf.detections.filter((d) => d.code && d.active).length} lus</span></h2>
+      <h2><i>2</i> Vérifier le comptage <span class="count">${ui.shelf.detections.filter((d) => d.code && d.active).length} lus</span></h2>
       <div class="legend"><span><i class="l-ok"></i>Compté</span><span><i class="l-unk"></i>Inconnu — touchez</span><span><i class="l-off"></i>Exclu</span></div>
       <div class="stage" id="stage" data-act="stage">
         <img src="${ui.shelf.img}" alt="Photo de l’étagère">
@@ -392,7 +402,7 @@ function scanInventaire() {
       </div>
       <p class="hint">Touchez un cadre pour l’exclure, une zone vide pour ajouter un carton oublié.</p>
       <table class="table">
-        <thead><tr><th>N°</th><th>Produit</th><th class="r">Vis.</th><th class="r">× Prof.</th><th class="r">Total</th></tr></thead>
+        <thead><tr><th>N°</th><th>Produit</th><th class="r">Vus</th><th class="r">× Rangées</th><th class="r">Total</th></tr></thead>
         <tbody>${codes.map((c) => `<tr>
           <td class="d">${esc(c)}</td>
           <td>${esc(articleByRef(c)?.nom || '')}</td>
@@ -414,10 +424,10 @@ function scanInventaire() {
     const totals = inventoryTotals();
     const codes = Object.keys(totals).sort(sortNum);
     html += `<section class="card">
-      <h2><i>3</i> Inventaire en cours <span class="count">${shelves.length} étag.</span></h2>
+      <h2><i>3</i> Inventaire en cours <span class="count">${shelves.length} étagère${shelves.length > 1 ? 's' : ''}</span></h2>
       <div class="chips" style="margin-bottom:12px">${shelves.map((e) => `<button class="chip" data-act="shelf-remove" data-id="${e.id}" title="Retirer">${esc(e.nom)} <small>${Object.values(e.items).reduce((s, it) => s + it.total, 0)} ×</small></button>`).join('')}</div>
       <table class="table">
-        <thead><tr><th>N°</th><th>Produit</th><th class="r">Stock</th><th class="r">Compté</th><th class="r">Écart</th></tr></thead>
+        <thead><tr><th>N°</th><th>Produit</th><th class="r">Avant</th><th class="r">Compté</th><th class="r">Écart</th></tr></thead>
         <tbody>${codes.map((c) => {
           const a = articleByRef(c);
           const diff = a ? totals[c] - a.stocks : 0;
@@ -429,6 +439,7 @@ function scanInventaire() {
       <p class="hint">Seuls les produits comptés sont mis à jour. Les écarts sont enregistrés dans l’historique.</p>
       <div class="btn-row">
         <button class="btn danger" data-act="inv-clear">Vider</button>
+        <button class="btn" data-act="export-xlsx">Excel</button>
         <button class="btn primary" data-act="inv-apply">Appliquer au stock</button>
       </div>
     </section>`;
@@ -455,7 +466,7 @@ const KINDS = {
 function viewProduits() {
   const kinds = Object.entries(KINDS);
   return `
-    <div class="page-title">PRODUITS</div>
+    <div class="page-title">PRODUITS<small>Fiches produits, classement et étiquettes</small></div>
     <div class="kpis">${kinds.map(([k, d]) => kpi(d.label, db[k].length)).join('')}</div>
     <div class="btn-row" style="margin:0 0 6px">
       <button class="btn big primary" data-act="new-article">+ Nouveau produit</button>
@@ -463,7 +474,7 @@ function viewProduits() {
     </div>
     <div class="cols">${kinds.map(([k, d], i) => `
       <section class="card">
-        <h2><i>${String(i + 1).padStart(2, '0')}</i> ${d.label} <span class="count">${db[k].length}</span></h2>
+        <h2>${d.label} <span class="count">${db[k].length}</span></h2>
         <div class="chips">
           ${[...db[k]].sort((a, b) => a.nom.localeCompare(b.nom)).map((x) => `<button class="chip" data-act="edit-data" data-kind="${k}" data-id="${x.id}">${esc(x.nom)}${k === 'sousCategories' ? `<small>${esc(nomOf(db.categories, x.idCategorie))}</small>` : ''}</button>`).join('')}
           <button class="chip add" data-act="edit-data" data-kind="${k}">+ ${d.one}</button>
@@ -477,30 +488,40 @@ function viewProduits() {
 function viewParams() {
   const t = db.params.theme;
   return `
-    <div class="page-title">PARAMS</div>
+    <div class="page-title">RÉGLAGES</div>
     <div class="cols">
       <section class="card">
-        <h2><i>01</i> Thème</h2>
-        <div class="seg full">${[['paper', 'Paper'], ['night', 'Night'], ['auto', 'Auto']].map(([k, l]) => `<button data-act="theme" data-v="${k}" class="${t === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      </section>
-      <section class="card">
-        <h2><i>02</i> Exporter</h2>
-        <div class="btn-row" style="margin-top:0">
-          <button class="btn" data-act="export-articles">Produits CSV</button>
-          <button class="btn" data-act="export-historique">Historique CSV</button>
+        <h2>Établissement</h2>
+        <div class="field-row" style="grid-template-columns:1fr auto">
+          <input id="site" value="${esc(db.params.site || '')}" placeholder="ex. Sodexo · Cuisine centrale" autocomplete="off">
+          <button class="btn primary" data-act="site">Enregistrer</button>
         </div>
-        <p class="hint">Fichiers séparés par « ; », lisibles directement dans Excel.</p>
+        <p class="hint">Affiché en tête des fichiers Excel et sur l’accueil.</p>
       </section>
       <section class="card">
-        <h2><i>03</i> Sauvegarde</h2>
+        <h2>Export Excel</h2>
+        <button class="btn big primary" data-act="export-xlsx">Télécharger le fichier Excel</button>
+        <p class="hint">Un classeur .xlsx avec 4 onglets : <b>Stocks</b>, <b>À commander</b>, <b>Mouvements</b> et <b>Inventaires</b> (avec écarts). Filtres et totaux prêts à l’emploi.</p>
+        ${db.inventaires.length ? `<ul class="list">${[...db.inventaires].reverse().slice(0, 5).map((inv) => `
+          <li data-act="export-xlsx" data-id="${inv.id}">
+            <span class="grow"><b>${esc(inv.nom)}</b><small>${fmtDateLong(inv.date)} · ${inv.lignes.length} produits · ${inv.lignes.filter((l) => l.ecart).length} écart(s)</small></span>
+            <span class="pill">Excel</span>
+          </li>`).join('')}</ul>` : ''}
+      </section>
+      <section class="card">
+        <h2>Sauvegarde</h2>
         <div class="btn-row" style="margin-top:0">
           <button class="btn" data-act="backup">Télécharger</button>
           <button class="btn" data-act="restore">Restaurer</button>
         </div>
-        <p class="hint">Les données sont stockées sur cet appareil uniquement. Pensez à sauvegarder.</p>
+        <p class="hint">Les données sont enregistrées sur cet appareil uniquement. Faites une sauvegarde régulièrement.</p>
       </section>
       <section class="card">
-        <h2><i>04</i> Données</h2>
+        <h2>Apparence</h2>
+        <div class="seg full">${[['paper', 'Clair'], ['night', 'Sombre'], ['auto', 'Auto']].map(([k, l]) => `<button data-act="theme" data-v="${k}" class="${t === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      </section>
+      <section class="card">
+        <h2>Données</h2>
         <div class="btn-row" style="margin-top:0">
           <button class="btn" data-act="demo">Charger la démo</button>
           <button class="btn danger" data-act="wipe">Tout effacer</button>
@@ -508,14 +529,14 @@ function viewParams() {
       </section>
       ${aiSettingsHtml()}
     </div>
-    <p class="hint" style="text-align:center;margin-top:16px">Version 1.3 ·D’après MesStocks de Christophe Garcia · Interface Font Lab</p>`;
+    <p class="hint" style="text-align:center;margin-top:16px">Version 1.9 · D’après MesStocks de Christophe Garcia</p>`;
 }
 
 function aiSettingsHtml() {
   const s = Ai.settings();
   return `
       <section class="card">
-        <h2><i>05</i> IA de lecture · Groq ${s.on && s.key ? '<span class="pill accent">Active</span>' : ''}</h2>
+        <h2>IA de lecture des chiffres · Groq ${s.on && s.key ? '<span class="pill accent">Active</span>' : ''}</h2>
         <div class="seg full" style="margin-bottom:12px">
           <button data-act="ai-on" data-v="1" class="${s.on ? 'on' : ''}">Activée</button>
           <button data-act="ai-on" data-v="0" class="${s.on ? '' : 'on'}">Désactivée</button>
@@ -528,7 +549,7 @@ function aiSettingsHtml() {
           <button class="btn" data-act="ai-test">Tester</button>
           <button class="btn primary" data-act="ai-save">Enregistrer</button>
         </div>
-        <p class="hint">L’IA relit chaque numéro repéré et écarte le décor. Seuls de petits extraits de la photo autour des numéros sont envoyés à Groq. La clé reste sur cet appareil et n’est pas incluse dans les sauvegardes. Clé gratuite sur console.groq.com.</p>
+        <p class="hint">Facultatif : utile seulement pour les numéros écrits à la main (les étiquettes QR n’en ont pas besoin). L’IA relit chaque numéro repéré et écarte le décor. Seuls de petits extraits de la photo autour des numéros sont envoyés à Groq. La clé reste sur cet appareil et n’est pas incluse dans les sauvegardes. Clé gratuite sur console.groq.com.</p>
       </section>`;
 }
 
@@ -565,7 +586,7 @@ function viewHistorique() {
     ${seg('periode', [['toutes', 'Toutes'], ['mois', 'Mois'], ['semaine', 'Semaine'], ['jour', 'Aujourd’hui']])}
     <div class="filters" style="grid-template-columns:1fr"><select data-bind="hist.user">${options(db.utilisateurs, f.user, 'Toutes les personnes')}</select></div>
     <section class="card">
-      <h2><i>H</i> Mouvements <span class="count">${list.length}</span></h2>
+      <h2>Mouvements <span class="count">${list.length}</span></h2>
       <ul class="list">${list.map(movementRow).join('') || '<li class="empty">Aucun mouvement</li>'}</ul>
     </section>`;
 }
@@ -601,7 +622,7 @@ function closeSheet() {
 let sheetCtx = null;
 
 function sheetHead(tag, title) {
-  return `<div class="sheet-head"><h2><i>${tag}</i> ${title}</h2><button class="text-btn" data-act="sheet-close">Fermer</button></div>`;
+  return `<div class="sheet-head"><h2>${title}</h2><button class="text-btn" data-act="sheet-close">Fermer</button></div>`;
 }
 
 function openArticle(id) {
@@ -623,11 +644,11 @@ function openArticle(id) {
         <label class="field"><span>Marque</span><select id="f-marque">${options(db.marques, a.idMarque, '—')}</select></label>
       </div>
       <div class="field-row three">
-        <label class="field"><span>Stock</span><input id="f-stocks" type="number" min="0" inputmode="numeric" value="${a.stocks}"></label>
+        <label class="field"><span>Stock (cartons)</span><input id="f-stocks" type="number" min="0" inputmode="numeric" value="${a.stocks}"></label>
         <label class="field"><span>Stock mini</span><input id="f-mini" type="number" min="0" inputmode="numeric" value="${a.stocksMini}"></label>
-        <label class="field"><span>Profondeur</span><input id="f-prof" type="number" min="1" inputmode="numeric" value="${a.profondeur || 1}"></label>
+        <label class="field"><span>Rangées</span><input id="f-prof" type="number" min="1" inputmode="numeric" value="${a.profondeur || 1}"></label>
       </div>
-      <p class="hint" style="margin-top:-4px">Profondeur : nombre de cartons cachés derrière chaque carton visible sur l’étagère.</p>
+      <p class="hint" style="margin-top:-4px">Stock mini : en dessous, le produit passe « à commander ». Rangées : nombre de cartons l’un derrière l’autre sur l’étagère (1 si rien n’est caché).</p>
       <div class="btn-row">
         ${id ? '<button class="btn danger" data-act="article-delete">Supprimer</button>' : ''}
         <button class="btn primary" data-act="article-save">Enregistrer</button>
@@ -635,7 +656,7 @@ function openArticle(id) {
       ${id && a.reference ? `<button class="btn big" data-act="labels-open" data-id="${id}" style="margin-top:10px">Imprimer des étiquettes</button>` : ''}
     </section>
     ${id ? `<section class="card">
-      <h2><i>H</i> Derniers mouvements</h2>
+      <h2>Derniers mouvements</h2>
       <ul class="list">${recent.map(movementRow).join('') || '<li class="empty">Aucun mouvement</li>'}</ul>
       <div class="btn-row"><button class="btn ghost" data-act="article-history">Tout l’historique →</button>
       <button class="btn ghost" data-act="article-move">Entrée / sortie →</button></div>
@@ -763,7 +784,7 @@ function renderLabels() {
       <p class="hint">Grandes étiquettes (8 par page) : lisibles sur une photo d’étagère de 2 à 2,5 m de large. Plus petites : rapprochez-vous. « Première étiquette » sert à réutiliser une planche autocollante entamée. Traits de découpe : pour du papier normal.</p>
     </section>
     <section class="card">
-      <h2><i>P</i> Produits <span class="count">${total} étiq.</span></h2>
+      <h2>Produits <span class="count">${total} étiq.</span></h2>
       <div class="btn-row" style="margin:0 0 8px">
         <button class="btn small" data-act="lbl-all">Tous × 1</button>
         <button class="btn small" data-act="lbl-none">Tout à 0</button>
@@ -1165,7 +1186,7 @@ function onMarkerTap(i) {
 
 function download(name, content, type) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.href = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type }));
   a.download = name;
   document.body.appendChild(a);
   a.click();
@@ -1173,12 +1194,98 @@ function download(name, content, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-function csv(rows) {
-  const cell = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  return '﻿' + rows.map((r) => r.map(cell).join(';')).join('\r\n');
+const today = () => new Date().toISOString().slice(0, 10);
+const siteName = () => (db.params.site || '').trim();
+const fileSlug = () => (siteName() || 'stocks').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+const qtyToOrder = (a) => (aCommander(a) ? a.stocksMini - a.stocks : 0);
+const ORIGINES = { scan: 'Scan', manuel: 'Correction fiche', inventaire: 'Inventaire' };
+
+// Lignes d'un inventaire : stock avant, compté, écart, détail par étagère
+function inventoryLines(etageres, stockOf) {
+  const lines = {};
+  etageres.forEach((e) => Object.entries(e.items).forEach(([code, it]) => {
+    const l = (lines[code] = lines[code] || { code, compte: 0, detail: [] });
+    l.compte += it.total;
+    l.detail.push(`${e.nom} : ${it.total}`);
+  }));
+  return Object.values(lines).sort((x, y) => sortNum(x.code, y.code)).map((l) => {
+    const a = articleByRef(l.code);
+    const avant = stockOf(l.code, a);
+    return { code: l.code, nom: a?.nom || 'Numéro inconnu', avant, compte: l.compte, ecart: avant === '' ? '' : l.compte - avant, detail: l.detail.join(' · ') };
+  });
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const INV_COLUMNS = [
+  { header: 'Date', key: 'date', width: 17, type: 'date' },
+  { header: 'Inventaire', key: 'nomInv', width: 22 },
+  { header: 'N° carton', key: 'code', width: 11 },
+  { header: 'Produit', key: 'nom', width: 40 },
+  { header: 'Stock avant', key: 'avant', width: 12, type: 'int' },
+  { header: 'Compté', key: 'compte', width: 10, type: 'int' },
+  { header: 'Écart', key: 'ecart', width: 10, type: 'signed' },
+  { header: 'Détail par étagère', key: 'detail', width: 40 },
+];
+const invSheet = (name, title, rows) => ({
+  name, title, columns: INV_COLUMNS, rows, totals: ['compte', 'ecart'], markKey: 'ecart',
+  mark: (r) => (r.ecart ? 'accent' : null),
+});
+const invRows = (inv) => inv.lignes.map((l) => ({ ...l, date: inv.date, nomInv: inv.nom }));
+
+// Classeur complet : stocks, à commander, mouvements, inventaires
+function workbookAll() {
+  const arts = [...db.articles].sort((a, b) => sortNum(a.reference || 'zz', b.reference || 'zz'));
+  const stockRows = arts.map((a) => ({
+    code: a.reference, nom: a.nom, cat: nomOf(db.categories, a.idCategorie), sous: nomOf(db.sousCategories, a.idSousCategorie),
+    marque: nomOf(db.marques, a.idMarque), stock: a.stocks, mini: a.stocksMini, cmd: qtyToOrder(a), statut: aCommander(a) ? 'À commander' : 'OK',
+  }));
+  const mvtRows = [...db.historique].sort((a, b) => b.date.localeCompare(a.date)).map((h) => {
+    const a = byId(db.articles, h.idArticle);
+    return {
+      date: h.date, code: a?.reference || '', nom: a?.nom || 'Produit supprimé', type: h.type === 'E' ? 'Entrée' : 'Sortie',
+      qte: h.type === 'E' ? h.quantite : -h.quantite, qui: h.idUtilisateur ? nomOf(db.utilisateurs, h.idUtilisateur) : '', origine: ORIGINES[h.source] || h.source || '',
+    };
+  });
+  const enCours = db.inventaire.etageres.length
+    ? inventoryLines(db.inventaire.etageres, (c, a) => (a ? a.stocks : '')).map((l) => ({ ...l, date: new Date().toISOString(), nomInv: 'En cours (non appliqué)' }))
+    : [];
+  const invAll = [...enCours, ...[...db.inventaires].reverse().flatMap(invRows)];
+  const S = { name: 'Stocks', title: 'État des stocks', rows: stockRows, totals: ['stock', 'cmd'], markKey: 'statut', mark: (r) => (r.cmd ? 'accent' : null),
+    columns: [
+      { header: 'N° carton', key: 'code', width: 11 }, { header: 'Produit', key: 'nom', width: 40 },
+      { header: 'Catégorie', key: 'cat', width: 18 }, { header: 'Sous-catégorie', key: 'sous', width: 18 }, { header: 'Marque', key: 'marque', width: 16 },
+      { header: 'Stock', key: 'stock', width: 9, type: 'int' }, { header: 'Stock mini', key: 'mini', width: 11, type: 'int' },
+      { header: 'À commander', key: 'cmd', width: 13, type: 'int' }, { header: 'Statut', key: 'statut', width: 14 },
+    ] };
+  return [
+    S,
+    { ...S, name: 'À commander', title: 'Produits sous le stock mini', rows: stockRows.filter((r) => r.cmd), mark: null },
+    { name: 'Mouvements', title: 'Entrées et sorties', rows: mvtRows, totals: ['qte'], columns: [
+      { header: 'Date', key: 'date', width: 17, type: 'date' }, { header: 'N° carton', key: 'code', width: 11 }, { header: 'Produit', key: 'nom', width: 40 },
+      { header: 'Type', key: 'type', width: 10 }, { header: 'Quantité', key: 'qte', width: 10, type: 'signed' },
+      { header: 'Personne', key: 'qui', width: 16 }, { header: 'Origine', key: 'origine', width: 18 },
+    ], mark: (r) => (r.type === 'Entrée' ? 'ok' : null) },
+    invSheet('Inventaires', 'Inventaires (comptage des étagères)', invAll),
+  ];
+}
+
+// what : 'all' | id d'un inventaire terminé
+async function exportExcel(what = 'all', btn) {
+  const inv = what !== 'all' && byId(db.inventaires, what);
+  const label = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Création…'; }
+  try {
+    const now = new Date();
+    const subtitle = [siteName(), 'Export du ' + now.toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' })].filter(Boolean).join(' · ');
+    const sheets = inv ? [invSheet('Inventaire', `${inv.nom} · ${fmtDateLong(inv.date)}`, invRows(inv))] : workbookAll();
+    const blob = await Excel.blob({ title: siteName() || 'MesStocks', subtitle, sheets });
+    download(`${inv ? 'inventaire' : 'stocks'}-${fileSlug()}-${today()}.xlsx`, blob);
+    toast('Fichier Excel téléchargé');
+  } catch (err) {
+    toast('Export impossible : ' + err.message, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
 
 // ---------------------------------------------------------------- actions
 
@@ -1335,6 +1442,11 @@ const ACT = {
     const totals = inventoryTotals();
     const changes = Object.entries(totals).map(([code, n]) => [articleByRef(code), n]).filter(([a, n]) => a && a.stocks !== n);
     if (!confirm(changes.length ? `Mettre à jour ${changes.length} produit(s) ?` : 'Aucun écart. Clôturer l’inventaire ?')) return;
+    const shelves = db.inventaire.etageres;
+    db.inventaires.push({
+      id: uid(), date: new Date().toISOString(), nom: `Inventaire du ${new Date().toLocaleDateString('fr-FR')}`,
+      etageres: shelves.map((e) => e.nom), lignes: inventoryLines(shelves, (c, a) => (a ? a.stocks : '')),
+    });
     changes.forEach(([a, n]) => {
       const delta = n - a.stocks;
       addMovement(a, delta > 0 ? 'E' : 'S', Math.abs(delta), '', 'inventaire');
@@ -1342,27 +1454,12 @@ const ACT = {
     logEvent('I', `Inventaire · ${db.inventaire.etageres.length} étagère(s) · ${changes.length} écart(s)`, 'M');
     db.inventaire.etageres = [];
     persist();
-    toast('Stock mis à jour');
+    toast('Stock mis à jour · rapport disponible en Excel');
     render();
   },
 
-  'export-articles': () => {
-    const rows = [['N°', 'Nom', 'Catégorie', 'Sous-catégorie', 'Marque', 'Stock', 'Stock mini', 'À commander']];
-    [...db.articles].sort((a, b) => sortNum(a.reference || 'zz', b.reference || 'zz')).forEach((a) => rows.push([
-      a.reference, a.nom, nomOf(db.categories, a.idCategorie), nomOf(db.sousCategories, a.idSousCategorie),
-      nomOf(db.marques, a.idMarque), a.stocks, a.stocksMini, aCommander(a) ? Math.max(0, a.stocksMini - a.stocks) : 0,
-    ]));
-    download(`produits-${today()}.csv`, csv(rows), 'text/csv;charset=utf-8');
-  },
-  'export-historique': () => {
-    const rows = [['Date', 'N°', 'Produit', 'Type', 'Quantité', 'Personne', 'Origine']];
-    [...db.historique].sort((a, b) => b.date.localeCompare(a.date)).forEach((h) => {
-      const a = byId(db.articles, h.idArticle);
-      rows.push([fmtDateLong(h.date), a?.reference || '', a?.nom || 'Supprimé', h.type === 'E' ? 'Entrée' : 'Sortie', h.quantite,
-        h.idUtilisateur ? nomOf(db.utilisateurs, h.idUtilisateur) : '', h.source]);
-    });
-    download(`historique-${today()}.csv`, csv(rows), 'text/csv;charset=utf-8');
-  },
+  'export-xlsx': (el) => exportExcel(el.dataset.id || 'all', el),
+  site: (el) => { db.params.site = $('site').value.trim(); persist(); toast('Établissement enregistré'); render(); },
   backup: () => download(`messtocks-${today()}.json`, JSON.stringify(db, null, 2), 'application/json'),
   restore: () => $('restore').click(),
   demo: () => {

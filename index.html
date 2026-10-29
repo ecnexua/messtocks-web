@@ -11,18 +11,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1.8">
+  <link rel="stylesheet" href="style.css?v=1.9">
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script async src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 </head>
 <body>
   <header class="topbar">
     <button class="brand" data-act="tab" data-tab="recap">
-      <span class="logo">MES·STOCKS</span><span class="ver">WEB 1.8</span>
+      <span class="logo">MES·STOCKS</span><span class="ver">WEB 1.9</span>
     </button>
     <div class="top-actions">
       <span id="busy" class="busy hidden">LECTURE<b>.</b><b>.</b><b>.</b></span>
-      <button class="text-btn" data-act="page" data-page="evenements">Journal</button>
+      <button class="btn small primary" data-act="export-xlsx">Excel</button>
       <button class="text-btn" data-act="toggle-theme">Thème</button>
     </div>
   </header>
@@ -30,11 +30,11 @@
   <main id="view" class="view"></main>
 
   <nav class="tabbar">
-    <button data-act="tab" data-tab="recap"><i>01</i><span>Récap</span></button>
-    <button data-act="tab" data-tab="recherche"><i>02</i><span>Stocks</span></button>
+    <button data-act="tab" data-tab="recap"><span>Récap</span></button>
+    <button data-act="tab" data-tab="recherche"><span>Stocks</span></button>
     <button data-act="tab" data-tab="scan" class="scan-tab"><b>SCAN</b></button>
-    <button data-act="tab" data-tab="produits"><i>04</i><span>Produits</span></button>
-    <button data-act="tab" data-tab="params"><i>05</i><span>Params</span></button>
+    <button data-act="tab" data-tab="produits"><span>Produits</span></button>
+    <button data-act="tab" data-tab="params"><span>Réglages</span></button>
   </nav>
 
   <!-- Caméra plein écran, commandes par-dessus -->
@@ -60,10 +60,11 @@
   <input id="photo" type="file" accept="image/*" hidden>
   <input id="restore" type="file" accept="application/json,.json" hidden>
 
-  <script src="codes.js?v=1.8"></script>
-  <script src="labels.js?v=1.8"></script>
-  <script src="ai.js?v=1.8"></script>
-  <script src="ocr.js?v=1.8"></script>
-  <script src="app.js?v=1.8"></script>
+  <script src="codes.js?v=1.9"></script>
+  <script src="labels.js?v=1.9"></script>
+  <script src="excel.js?v=1.9"></script>
+  <script src="ai.js?v=1.9"></script>
+  <script src="ocr.js?v=1.9"></script>
+  <script src="app.js?v=1.9"></script>
 </body>
 </html>
