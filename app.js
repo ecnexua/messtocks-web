@@ -1196,7 +1196,7 @@ function download(name, content, type) {
 
 const today = () => new Date().toISOString().slice(0, 10);
 const siteName = () => (db.params.site || '').trim();
-const fileSlug = () => (siteName() || 'stocks').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+const fileSlug = () => (siteName() || 'messtocks').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
 const qtyToOrder = (a) => (aCommander(a) ? a.stocksMini - a.stocks : 0);
 const ORIGINES = { scan: 'Scan', manuel: 'Correction fiche', inventaire: 'Inventaire' };
 
